@@ -1,0 +1,14 @@
+# src/battleships/config/fleet.yml
+
+roster: default
+
+ships:
+  aircraft_carrier: { quantity: 1 }
+
+  battleship: { quantity: 1 }
+
+  cruiser: { quantity: 1 }
+
+  destroyer: { quantity: 2 }
+
+  submarine: { quantity: 2 }
