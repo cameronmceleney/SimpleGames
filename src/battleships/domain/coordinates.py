@@ -54,8 +54,9 @@ from pydantic import (
     field_validator)
 
 # Local application imports
+from src.utils.utils import JUST_L_WIDTH
 
-__all__ = ['Coord']
+__all__ = ['Coord', 'Placement']
 
 
 # Module-level constants
@@ -65,6 +66,7 @@ Coord = tuple[int, int]
 class Placement(BaseModel):
     """"""
     positions: list[Coord] = Field(
+        default_factory=list,
         validation_alias=AliasChoices('positions', 'position')
     )
 
@@ -74,5 +76,10 @@ class Placement(BaseModel):
         """Obtains coordinate positions.
 
         Accept the following formats:
-            -
+            - (A, 1)
+            - (1, 1)
         """
+        return value
+
+    def __str__(self):
+        return f"{"Positions":<{JUST_L_WIDTH}}{self.positions}"

@@ -2,8 +2,8 @@
 
 default:  # id
   roster:
-    aircraft_carrier: { size: 5 }
-    battleship: { size: 4 }
-    cruiser: { size: 3 }
+    aircraft_carrier: { size: 5, is_cloaked: false }
+    battleship: { size: 4, is_cloaked: false }
+    cruiser: { size: 3, is_cloaked: false }
     destroyer: { size: 2, is_cloaked: false }
-    submarine: { size: 1 }
+    submarine: { size: 1, is_cloaked: false }

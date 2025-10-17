@@ -61,6 +61,8 @@ from typing import Optional
 # Local application imports
 from src.battleships.settings import BoardSettings
 from src.battleships.domain.fleet import Fleet
+from src.battleships.domain.ship import ShipSpec
+from src.utils.utils import CONSOLE_DIVIDER, JUST_L_WIDTH
 
 # Module-level constants
 
@@ -73,8 +75,6 @@ class Board:
     length: int
     width: int
     grid: np.ndarray = field(init=False, repr=False)
-
-    _has_loaded_fleet: bool = field(default=False, init=False, repr=False)
 
     def __post_init__(self):
         """Initialise grid after dataclass is constructed."""
@@ -99,19 +99,27 @@ class Board:
         """Print the current grid-state."""
         for row in self.grid:
             print(' '.join(map(str, row)))
-        return
 
-    def add_fleet(self, fleet: Fleet):
-        """Load a fleet onto the board."""
+    def add_ship(self, ship: ShipSpec) -> None:
+        """Load a single ship onto the board."""
 
-        if self._has_loaded_fleet:
-            raise RuntimeError(f"A fleet has already been loaded onto this "
-                               f"board.")
+        pass
 
-        for ship in fleet.roster.items():
+    def __str__(self, headers: bool = True):
 
+        msg = ""
+        if headers:
+            msg += f"{CONSOLE_DIVIDER}"
 
+        msg += f"<Board>\n"
+        msg += f"{CONSOLE_DIVIDER}"
 
+        for k, v in self.__dict__.items():
+            if k == 'grid':
+                continue
+            msg += f"{k.capitalize():<{JUST_L_WIDTH}}{v}\n"
 
+        if headers:
+            msg += f"{CONSOLE_DIVIDER}"
 
-
+        return msg

@@ -47,6 +47,11 @@ from __future__ import annotations
 
 # Local application imports
 from src.battleships.domain.board import Board
+from src.battleships.domain.player import Player
+from src.battleships.domain.fleet import Fleet
+from src.log import get_logger
+
+log = get_logger(__name__)
 
 # Module-level constants
 
@@ -56,22 +61,44 @@ __all__ = ['Battleships']
 class Battleships:
     """Battleships class.
 
-    Attributes:
-        x:
-    """
+    Allows one to play a game of battleships!
 
-    def __init__(self, autoplay: bool = True):
+    Attributes:
+        players:            All players in the game.
+    """
+    players: dict[str, Player]
+    _board_size: tuple[int, int]
+
+    def __init__(
+            self,
+            board_size: tuple[int, int] = (10, 10),
+            autoplay: bool = True
+    ):
         """"""
-        self.x = None
+        self.players = {}
+        self._board_size = board_size
+        self._rosters_yaml = "config/rosters.yml"
+
         self._post_init(autoplay=autoplay)
 
     @staticmethod
     def _post_init(**kwargs):
-        if 'autoplay' in kwargs.keys():
+        if 'autoplay' in kwargs.keys() and kwargs['autoplay'] == True:
             print("Working autoplay.")
             board = Board(length=5, width=5)
             board.show()
+
             exit()
+
+    def add_players(self, *names: str) -> None:
+        """Add a player to the game."""
+        for n in names:
+            f = Fleet.load_from_yaml(fleet_id='basic_fleet_1')
+            b = Board(length=self._board_size[0], width=self._board_size[1])
+            p = Player(name=n, fleet=f, board=b)
+            print(p.fleet.ships)
+
+            self.players[n] = p
 
     def load(self):
         """Load configuration data from yaml file."""
@@ -83,4 +110,7 @@ class Battleships:
 
 
 if __name__ == '__main__':
-    Battleships(autoplay=True)
+    bs = Battleships(board_size=(4, 4), autoplay=False)
+    bs.add_players("cameron")
+    # print(f"Players\n{bs.players}")
+    bs.load()

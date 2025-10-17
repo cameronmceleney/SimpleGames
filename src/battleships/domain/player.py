@@ -15,9 +15,7 @@ Trailing paragraphs summarising final details.
 )
 
 Todo:
-    * (Optional section for module-wide tasks).
-    * (Use format: 'YYMMDD/task_identifier - one-liner task description'
-    
+
 References:
     Style guide: `Google Python Style Guide`_
 
@@ -41,30 +39,55 @@ Notes:
 
 from __future__ import annotations
 
+from wsgiref import headers
+
 # Standard library imports
 from pydantic import BaseModel, ConfigDict, Field
+from dataclasses import dataclass, field
 
 # Third-party imports
 
 # Local application imports
 from src.battleships.domain.fleet import Fleet
 from src.battleships.domain.board import Board
+from src.utils.utils import JUST_L_WIDTH, CONSOLE_DIVIDER
 
 # Module-level constants
 
 __all__ = ['Player']
 
 
-class Player(BaseModel):
-    """"""
-    model_config = ConfigDict(frozen=True, validate_default=True)
+@dataclass
+class Player:
+    """Define player.
 
+    Attributes:
+        name:           Player's name
+
+        board:          2D grid showing their ships.
+
+        fleet:          All ships and their positions.
+
+        shots:          All guessed shots made by the player
+    """
     name: str
-    board: Board
-    fleet: Fleet
+    fleet: Fleet | None = None
+    board: Board | None = None
+    shots: list[tuple[int, int]] = field(default_factory=list)
 
-    shots: list[]
+    def __str__(self, headers: bool = True):
 
-    guesses: list[tuple[int, int]] = Field(default_factory=list)
-    active_ships: list[str] = Field(default_factory=list)
-    ship_positions: dict[str, tuple[int, int]] = Field(default_factory=dict)
+        msg = ""
+        if headers:
+            msg += f"{CONSOLE_DIVIDER}"
+
+        msg += f"<Player> '{self.name}'\n"
+        msg += f"{CONSOLE_DIVIDER}"
+        msg += self.fleet.__str__(headers=False)
+        msg += f"{CONSOLE_DIVIDER}"
+        msg += self.board.__str__(headers=False)
+
+        if headers:
+            msg += f"{CONSOLE_DIVIDER}"
+
+        return msg
