@@ -62,8 +62,6 @@ __all__ = ['Fleet']
 
 
 # Module-level constants
-ROSTERS_FILE_PATH = "config/rosters.yml"
-FLEET_FILE_PATH = "config/fleet.yml"
 
 
 class Roster(BaseModel):
@@ -82,7 +80,7 @@ class Roster(BaseModel):
     ships: dict[str, ShipSpec] = Field(default_factory=dict)
 
     @classmethod
-    def load_from_yaml(cls, id_: str, *, filepath: str = ROSTERS_FILE_PATH) -> 'Roster':
+    def load_from_yaml(cls, id_: str, *, filepath: str = "config/rosters.yml") -> 'Roster':
         """Load a roster from the YAML configuration file.
 
         The shape of each entry in the roster file should be:
@@ -140,15 +138,22 @@ class Fleet(BaseModel):
 
     id: str
     ships: dict[str, Ship] = Field(default_factory=dict)
+    roster: Roster = Field(default_factory=lambda r: Roster(id=''))
+    counts: dict[str, int] = Field(default_factory=dict, init=False, repr=False)
 
-    _roster_id: str | None = PrivateAttr(default=None)
+    _remaining_tiles: int = 0
+
+    @property
+    def is_alive(self) -> bool:
+        """Check if this fleet has at least one remaining tile to be sunk."""
+        return True if self._remaining_tiles > 0 else False
 
     @classmethod
     def load_from_yaml(
             cls,
-            fleet_id: str,
             *,
-            fleet_filepath: str = FLEET_FILE_PATH,
+            fleet_id: str,
+            fleet_filepath: str = "config/fleet.yml",
             settings=None
     ) -> 'Fleet':
         """Load a fleet from the YAML configuration file.
@@ -166,29 +171,64 @@ class Fleet(BaseModel):
             settings:           Game settings (not yet implemented)
         """
 
-        config_data = load_yaml(fleet_filepath)
-        fleet_props = config_data.get(fleet_id)
-        log.debug(fleet_props)
+        fleet_config = load_yaml(fleet_filepath)
+        fleet_props = fleet_config.get(fleet_id)
+
+        raw_counts = fleet_props.get('ships', {})
+        counts = {name: int(node.get('quantity')) for name, node in raw_counts.items()}
 
         roster = Roster.load_from_yaml(id_=fleet_props.get('roster'))
         log.debug(roster.ships)
 
         ships: dict[str, Ship] = {}
 
-        for name, spec in roster.ships.items():
-            quantity = int(fleet_props.get('ships').get(name).get('quantity'))
-            for q in range(0, quantity):
-                ships[name + f'_{q}'] = Ship(spec=spec)
+        for ship_type, spec in roster.ships.items():
+            quantity = counts.get(ship_type, 0)
+            for q in range(quantity):
+                key = f"{ship_type}_{q}"
+                ships[key] = Ship(spec=spec, type=ship_type)
 
         return cls.model_validate({'id': fleet_id,
                                    'ships': ships,
-                                   '_roster_id': roster.id},
+                                   'roster': roster,
+                                   'counts': counts},
                                   context=settings)
 
-    def __str__(self, headers: bool = True):
+    def apply_player_positions(self, player_data: Mapping[str, Any]) -> None:
+        """"""
+        track_counts = {t: 0 for t in self.counts}
+
+        for ship_type, node in player_data.items():
+            if ship_type not in self.counts:
+                raise ValueError(f"Unknown ship type: {ship_type}")
+
+            if "position" in node:
+                raw_list = node["position"]
+            elif "positions" in node:
+                raw_list = node["positions"]
+            else:
+                raise ValueError(f"{ship_type}: missing positions.")
+
+            for raw in raw_list:
+                idx = track_counts[ship_type]
+                if idx >= self.counts[ship_type]:
+                    raise ValueError(f"Too many positions for ship type: {ship_type}.")
+
+                key = f"{ship_type}_{idx}"
+                self.ships[key].update_position(raw)
+                track_counts[ship_type] += 1
+
+        missing = [t for t, need in self.counts.items() if track_counts.get(t, 0) != need]
+        if missing:
+            raise ValueError(f"Missing positions for ship type: {', '.join(missing)}")
+
+    def __call__(self, ship: str) -> Ship:
+        return self.ships[ship]
+
+    def __str__(self, print_headers: bool = True):
 
         msg = ""
-        if headers:
+        if print_headers:
             msg += f"{CONSOLE_DIVIDER}"
 
         msg += f"<Fleet> '{self.id}'\n"
@@ -198,7 +238,7 @@ class Fleet(BaseModel):
             key = "'" + k + "'"
             msg += f"{key:<{JUST_L_WIDTH}} {val.__repr__()}\n"
 
-        if headers:
+        if print_headers:
             msg += f"{CONSOLE_DIVIDER}"
 
         return msg

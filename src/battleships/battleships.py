@@ -42,13 +42,16 @@ Notes:
 from __future__ import annotations
 
 # Standard library imports
-
+from typing import Optional
 # Third-party imports
 
 # Local application imports
 from src.battleships.domain.board import Board
-from src.battleships.domain.player import Player
+from src.battleships.domain.player import (
+    Player,
+    MESSAGES as PLAYER_MESSAGES)
 from src.battleships.domain.fleet import Fleet
+from src.battleships.domain.coordinates import Placement
 from src.log import get_logger
 
 log = get_logger(__name__)
@@ -66,18 +69,26 @@ class Battleships:
     Attributes:
         players:            All players in the game.
     """
-    players: dict[str, Player]
+    players: list[Player]
     _board_size: tuple[int, int]
+    _rosters_yaml = "config/rosters.yml"
 
     def __init__(
             self,
             board_size: tuple[int, int] = (10, 10),
+            *,
+            players_names: Optional[list[str]] = None,
             autoplay: bool = True
     ):
         """"""
-        self.players = {}
+        self.players = []
+        self.remaining_players: int = 0
+        self._current_player_idx: int = 0
+        self._current_player: Optional[Player] = None
         self._board_size = board_size
-        self._rosters_yaml = "config/rosters.yml"
+
+        if players_names is not None:
+            self.add_players(*players_names)
 
         self._post_init(autoplay=autoplay)
 
@@ -93,24 +104,49 @@ class Battleships:
     def add_players(self, *names: str) -> None:
         """Add a player to the game."""
         for n in names:
-            f = Fleet.load_from_yaml(fleet_id='basic_fleet_1')
-            b = Board(length=self._board_size[0], width=self._board_size[1])
-            p = Player(name=n, fleet=f, board=b)
-            print(p.fleet.ships)
+            self.players.append(self._create_player(n))
 
-            self.players[n] = p
+            if len(self.players) == 1:
+                self._current_player = self.players[0]
 
-    def load(self):
-        """Load configuration data from yaml file."""
-        return
+    def _create_player(self, name: str) -> Player:
+        """"""
+        name_ = name.capitalize()
+        id_ = len(self.players)
+        player = Player(name=name_, id=id_)
+        log.debug(player)
 
-    def play(self):
-        """Play a game of battleships."""
-        return
+        player.apply_positions('config/player.yml')
+
+        # Update class attributes
+        self.remaining_players += 1
+
+        return player
+
+    def play(self) -> None:
+        """Play a game of battleships.
+
+        Turn-based game of battleships. Each player gets to take one shot (make
+        a guess) at the enemy's position.
+        """
+        while self.remaining_players > 1:
+            self._current_player.take_turn()
+            Player.end_turn()
+
+    def _allow_guess(self, idx: int):
+        """"""
+        msg = f"<Player {idx}> {PLAYER_MESSAGES['make_guess']} "
+        player_input = input(msg)
+        print(player_input)
+
+
+
+
 
 
 if __name__ == '__main__':
     bs = Battleships(board_size=(4, 4), autoplay=False)
-    bs.add_players("cameron")
+    bs.add_players("cameron", "karolina")
     # print(f"Players\n{bs.players}")
-    bs.load()
+    bs.play()
+

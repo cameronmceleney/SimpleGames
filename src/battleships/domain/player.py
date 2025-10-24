@@ -39,26 +39,37 @@ Notes:
 
 from __future__ import annotations
 
-from wsgiref import headers
+from functools import cached_property
 
 # Standard library imports
-from pydantic import BaseModel, ConfigDict, Field
-from dataclasses import dataclass, field
+import os
+import platform
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+from typing import Any
 
 # Third-party imports
 
 # Local application imports
 from src.battleships.domain.fleet import Fleet
 from src.battleships.domain.board import Board
-from src.utils.utils import JUST_L_WIDTH, CONSOLE_DIVIDER
+from src.utils.utils import JUST_L_WIDTH, CONSOLE_DIVIDER, load_yaml
+from src.battleships.domain.coordinates import Guesses
 
 # Module-level constants
+PLAYER_FILE_PATH = "config/player.yml"
 
-__all__ = ['Player']
+from src.log import get_logger
+
+log = get_logger(__name__)
+
+__all__ = ['Player', 'MESSAGES']
+
+MESSAGES: dict = {
+    'make_guess': "Enter the co-ordinates of your next shot: "
+}
 
 
-@dataclass
-class Player:
+class Player(BaseModel):
     """Define player.
 
     Attributes:
@@ -71,23 +82,71 @@ class Player:
         shots:          All guessed shots made by the player
     """
     name: str
-    fleet: Fleet | None = None
-    board: Board | None = None
-    shots: list[tuple[int, int]] = field(default_factory=list)
+    id: int
 
-    def __str__(self, headers: bool = True):
+    fleet: Fleet = Field(default_factory=lambda: Player._default_fleet())
+    board: Board = Field(default_factory=lambda: Player._default_board())
+    shots: Guesses = Field(default_factory=lambda: Guesses())
+
+    _config_file: str | None = None
+
+    @property
+    def is_playing(self) -> bool:
+        return self.fleet.is_alive
+
+    @staticmethod
+    def _default_fleet() -> Fleet:
+        return Fleet.load_from_yaml(fleet_id='basic_fleet_1')
+
+    @staticmethod
+    def _default_board() -> Board:
+        return Board(length=6, width=6)
+
+    def apply_positions(self, filepath: str | None) -> None:
+        """"""
+        player_data = load_yaml(filepath or PLAYER_FILE_PATH)
+        log.debug(player_data)
+        self.fleet.apply_player_positions(player_data)
+        # self.shots
+        self.board.add_ship(*self.fleet.ships.values())
+
+    def take_turn(self):
+        """"""
+        player_input = self._get_shot()
+        self._take_shot()
+
+    def _get_shot(self):
+        """"""
+        msg = f"<Player {self.id}> {MESSAGES['make_guess']} "
+        player_input = input(msg)
+
+    def _take_shot(self) -> None:
+        """"""
+        msg = f"<Player {self.id}> {MESSAGES['make_guess']} "
+        player_input = input(msg)
+        shot, err_msg = self.board.add_shot(player_input)
+        if err_msg is None:
+            self.shots.append(shot)
+
+        return
+
+    @classmethod
+    def end_turn(cls):
+        print("\n" * 4)
+
+    def __str__(self, print_headers: bool = True):
 
         msg = ""
-        if headers:
+        if print_headers:
             msg += f"{CONSOLE_DIVIDER}"
 
         msg += f"<Player> '{self.name}'\n"
         msg += f"{CONSOLE_DIVIDER}"
-        msg += self.fleet.__str__(headers=False)
+        msg += self.fleet.__str__(print_headers=False)
         msg += f"{CONSOLE_DIVIDER}"
-        msg += self.board.__str__(headers=False)
+        msg += self.board.__str__(print_headers=False)
 
-        if headers:
+        if print_headers:
             msg += f"{CONSOLE_DIVIDER}"
 
         return msg

@@ -3,8 +3,8 @@
 basic_fleet_1:
   roster: default
   ships:
-    aircraft_carrier: { quantity: 1 }
-    battleship: { quantity: 1 }
-    cruiser: { quantity: 1 }
-    destroyer: { quantity: 2 }
-    submarine: { quantity: 2 }
+    aircraft_carrier: { quantity: 1, symbol: 'A' }
+    battleship: { quantity: 1, symbol: 'B' }
+    cruiser: { quantity: 1, symbol: 'D' }
+    destroyer: { quantity: 2, symbol: 'D' }
+    submarine: { quantity: 2, symbol: 'S' }

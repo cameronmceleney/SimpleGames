@@ -41,14 +41,21 @@ from __future__ import annotations
 
 
 # Standard library imports
-from pydantic import BaseModel, ConfigDict, Field, field_validator, \
-    model_validator, PrivateAttr
-from pydantic.dataclasses import dataclass
+from typing import Any
 
 # Third-party imports
+from pydantic import (BaseModel,
+                      ConfigDict,
+                      Field, field_validator,
+                      model_validator,
+                      PrivateAttr, AliasChoices)
 
+from pydantic.dataclasses import dataclass
+
+from battleships.domain.position import coerce_position
 # Local application imports
-from src.battleships.domain.coordinates import Coord, Placement
+from src.battleships.domain.coordinate import Coordinate
+from src.battleships.domain.position import Position, POSITION_ALIASES, PositionField
 from src.utils.utils import clean_string, truthy_to_printable, JUST_L_WIDTH
 
 # Module-level constants
@@ -82,40 +89,68 @@ class Ship(BaseModel):
     a given ship to create a valid ``Ship`` instance.
 
     Attributes:
-        id:             Tag.
+        spec:               Ship's specification.
 
-        pos:            Position of the ship on the playing board.
+        type:                 Tag.
 
-        is_alive:         Tracks whether the ship has been destroyed.
+        position:                Position of the ship on the playing board.
+
+        _is_alive:          Tracks whether the ship has been destroyed.
+
+        _is_placed:         Has this ship been placed (i.e. *loaded*) onto the game's board.
 
     """
-    model_config = ConfigDict(frozen=True, validate_default=True)
+    model_config = ConfigDict(frozen=False, validate_default=True)
 
     spec: 'ShipSpec'
-    id: str = ""
-    pos: 'Placement' = Placement()
+    type: str
+    placement: PositionField = Field(
+        ...,
+        validation_alias=AliasChoices(*POSITION_ALIASES))
 
     _is_alive: bool = PrivateAttr(default=True)
+    _is_placed: bool = PrivateAttr(default=False)
+
+    @model_validator(mode='after')
+    def _check_size(self) -> 'Ship':
+        if self.placement.size != self.spec.size:
+            raise ValueError(
+                f"Ship '{self.type}' expects {self.spec.size} tiles,"
+                f"but got {self.placement.size}."
+            )
+        return self
 
     @property
     def is_alive(self) -> bool:
         return self._is_alive
 
-    @property
-    def mark_hit(self) -> None:
-        raise NotImplementedError("This property is not implemented.")
-
     def mark_destroyed(self) -> None:
         self._is_alive = False
 
+    @property
+    def is_placed(self) -> bool:
+        return self._is_placed
+
+    def mark_placed(self):
+        self._is_placed = True
+
+    def update_position(self, pos) -> None:
+        """"""
+        if isinstance(pos, Coordinate):
+            self.pos = pos
+        else:
+            self.pos = Coordinate(pos)
+        self._is_placed = True
+
     def __str__(self):
-        return (f"<Ship> {self.id}\n"
+        return (f"<Ship> {self.type}\n"
                 f"{'-' * 8}\n"
                 f"{self.pos}\n"
-                f"{ship.spec}")
+                f"{self.spec}")
 
 
 if __name__ == "__main__":
-    ss = ShipSpec(size=5)
-    ship = Ship(spec=ss)
+    ship = Ship(spec=ShipSpec(size=5),
+                type='cruiser',
+                placement=[[1, 2], [2, 3]])
     print(ship)
