@@ -57,7 +57,6 @@ from pydantic import BeforeValidator
 __all__ = [
     'coordinate_type',
     'Coordinate',
-    'coerce_coordinate',
     'CoordinateField']
 
 
@@ -195,12 +194,15 @@ class Coordinate:
             raise ValueError(f"Expected exactly two elements when building a "
                              f"Coordinate, but got: {raw!r}")
 
+    @classmethod
+    def coerce(cls, v: Any) -> 'Coordinate':
+        """Adapter to convert an input into a valid ``Coordinate``."""
+        return v if isinstance(v, Coordinate) else Coordinate(v)
 
-def coerce_coordinate(v: Any) -> Coordinate:
-    """"""
-    return v if isinstance(v, Coordinate) else Coordinate(v)
+    def __str__(self):
+        return f"({self.x}, {self.y})"
 
 
 CoordinateField: TypeAlias = Annotated[
     Coordinate,
-    BeforeValidator(coerce_coordinate)]
+    BeforeValidator(Coordinate.coerce)]

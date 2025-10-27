@@ -40,20 +40,17 @@ Notes:
 from __future__ import annotations
 
 # Standard library imports
-from collections import Counter
 from typing import Any, Mapping
 
 # Third-party imports
 from pydantic import (
     BaseModel,
     ConfigDict,
-    Field,
-    model_validator,
-    ValidationInfo, computed_field, PrivateAttr)
+    Field)
 
 # Local application imports
 from src.battleships.domain.ship import ShipSpec, Ship
-from src.utils.utils import load_yaml, JUST_L_WIDTH, CONSOLE_DIVIDER
+from src.utils.utils import load_yaml, JustifyText, Divider
 from src.log import get_logger
 
 log = get_logger(__name__)
@@ -93,7 +90,7 @@ class Roster(BaseModel):
         """
         cls.id = id_
         roster_yaml = load_yaml(filepath)
-        #log.info(f"Roster | load_from_yaml({id_})\n{'-'*16}\n{root}\n\n")
+        # log.info(f"Roster | load_from_yaml({id_})\n{'-'*16}\n{root}\n\n")
 
         try:
             root = roster_yaml.get(id_)
@@ -109,17 +106,12 @@ class Roster(BaseModel):
         return cls(id=id_, ships=ships)
 
     def __str__(self):
-        msg = (f"{CONSOLE_DIVIDER}"
-               f"<Roster> '{self.id}'\n"
-               f"{CONSOLE_DIVIDER}")
-
+        msg = Divider.section.make_title('Roster', self.id, wrap=True)
         for k, val in self.ships.items():
-            key = "'" + k + "'"
-            msg += f"{key:<{JUST_L_WIDTH}} {val.__repr__()}\n"
+            key = f"'{k}'"
+            msg += JustifyText.kv(key, val, value_repr=True)
 
-        msg += f"{CONSOLE_DIVIDER}"
-
-        return msg
+        return msg + Divider.console
 
 
 class Fleet(BaseModel):
@@ -227,20 +219,10 @@ class Fleet(BaseModel):
 
     def __str__(self, print_headers: bool = True):
 
-        msg = ""
-        if print_headers:
-            msg += f"{CONSOLE_DIVIDER}"
-
-        msg += f"<Fleet> '{self.id}'\n"
-        msg += f"{CONSOLE_DIVIDER}"
+        msg = Divider.console if print_headers else ""
+        msg += Divider.console.make_title('Fleet', self.id)
 
         for k, val in self.ships.items():
-            key = "'" + k + "'"
-            msg += f"{key:<{JUST_L_WIDTH}} {val.__repr__()}\n"
+            msg += JustifyText.kv(f"'{k}'", val, value_repr=True)
 
-        if print_headers:
-            msg += f"{CONSOLE_DIVIDER}"
-
-        return msg
-
-
+        return msg + (Divider.console if print_headers else "")

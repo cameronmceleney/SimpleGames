@@ -49,40 +49,36 @@ from __future__ import annotations
 
 # Standard library imports
 from dataclasses import dataclass, field
-import numpy as np
+from enum import StrEnum
 import os
-from typing import Any, NamedTuple, Optional
+from typing import Any, ClassVar, Optional, Type
 
 # Third-party imports
+import numpy as np
+
 
 # Local application imports
 from src.battleships.settings import BoardSettings
 from src.battleships.domain.fleet import Fleet
 from src.battleships.domain.ship import Ship
-from src.utils.utils import CONSOLE_DIVIDER, JUST_L_WIDTH
-from src.battleships.domain.coordinates import Coord, Placement
+from src.utils.utils import CleanText, Divider, JustifyText
+from src.battleships.domain.coordinate import Coordinate
+from src.battleships.domain.position import Position
 
 
 # Module-level constants
-class SYMBOLS(NamedTuple):
-    """"""
-    empty: str = ' '
-    hit: str = '#'
-    miss: str = '/'
-    vertical_divider: str = '-'
-    horizontal_divider: str = '|'
+class Symbols(StrEnum):
+    """Symbols to denote ships and actions on the playing board."""
+    EMPTY = ' '
+    HIT = '#'
+    MISS = '/'
+    VERTICAL_DIVIDER = '-'
+    HORIZONTAL_DIVIDER = '|'
 
-    @property
-    def vd(self) -> str:
-        return self.vertical_divider
-
-    @property
-    def hd(self) -> str:
-        return self.horizontal_divider
-
-    @property
-    def space(self) -> str:
-        return self.empty
+    # Aliases
+    space = EMPTY
+    vd = VERTICAL_DIVIDER
+    hd = HORIZONTAL_DIVIDER
 
 
 __all__ = ['Board']
@@ -95,7 +91,7 @@ class Board:
     width: int
     grid: np.ndarray = field(init=False, repr=False)
 
-    _symbols: SYMBOLS = SYMBOLS()
+    _symbols: ClassVar[Type[Symbols]] = Symbols
 
     def __post_init__(self):
         """Initialise grid after dataclass is constructed."""
@@ -109,7 +105,7 @@ class Board:
             inplace: If `True`, update ``self.grid``. Otherwise, return a new grid.
         """
         grid = np.full(shape=(self.length, self.width),
-                       fill_value=self._symbols.empty,
+                       fill_value=self._symbols.EMPTY,
                        dtype='U1')
 
         if inplace:
@@ -137,8 +133,8 @@ class Board:
         col_nums: str = '' + indent
 
         for c, row in enumerate(self.grid):
-            output += self._bf(chr(65 + c)) + self._symbols.space
-            col_nums += self._bf(str(c)) + self._symbols.space
+            output += CleanText.bf(chr(65 + c)) + self._symbols.space
+            col_nums += CleanText.bf(c) + self._symbols.space
 
             if has_dividers:
                 output += self._symbols.hd + self._symbols.space
@@ -155,7 +151,7 @@ class Board:
 
         print(output)
 
-    def add_shot(self, shot: Any) -> tuple["Coord | None", str | None]:
+    def add_shot(self, shot: Any) -> "Coordinate | None":
         """Safely load a shot onto the game board.
 
         Only add a shot if the following conditions are true for the targeted
@@ -163,15 +159,13 @@ class Board:
             - it's empty, or
             - it's occupied by an unhit shit tile.
         """
-        is_valid, coord, err_msg = Coord.convert(shot)
-        if is_valid:
-            self.grid[coord] = '#'
-            self.show(has_dividers=False)
-            return coord, err_msg
+        coord = Coordinate.coerce(shot)
 
-        return None, err_msg
+        self.grid[coord] = self._symbols.HIT
+        self.show(has_dividers=False)
+        return coord
 
-    def add_ship(self, *ship: Ship | Placement) -> None:
+    def add_ship(self, *ship: Ship | Position) -> None:
         """Load a ship onto the game board.
 
         Can take any number of ships.
@@ -182,7 +176,7 @@ class Board:
         for s in ship:
             if isinstance(s, Ship):
                 self.add_guess(s.pos, s.type[0].upper())
-            if isinstance(s, Placement):
+            if isinstance(s, Position):
                 self.add_guess(s, 'S')
 
     def add_guess(self, coord: Coord | Placement, symbol: str = 'T'):
@@ -198,24 +192,12 @@ class Board:
 
     def __str__(self, print_headers: bool = True):
 
-        msg = ""
-        if print_headers:
-            msg += f"{CONSOLE_DIVIDER}"
+        msg = Divider.console if print_headers else ""
+        msg += Divider.console.make_title('Board')
 
-        msg += f"<Board>\n"
-        msg += f"{CONSOLE_DIVIDER}"
-
-        for k, v in self.__dict__.items():
-            if k == 'grid' or k[0] == '_':
+        for key, val in self.__dict__.items():
+            if key == 'grid' or key[0] == '_':
                 continue
-            msg += f"{k.capitalize():<{JUST_L_WIDTH}}{v}\n"
+            msg += JustifyText.kv(key.capitalize(), val)
 
-        if print_headers:
-            msg += f"{CONSOLE_DIVIDER}"
-
-        return msg
-
-    @staticmethod
-    def _bf(c: str) -> str:
-        """Make a string boldface."""
-        return f"\033[1m{c}\033[0m"
+        return msg + (Divider.console if print_headers else "")

@@ -14,7 +14,11 @@ Attributes:
 Trailing paragraphs summarising final details.
 )
 
-Todo:
+
+Examples:
+    Create a ``Ship`` instance.
+
+    >>> ship = Ship(spec=ShipSpec(size=2), type='cruiser', placement=Position.from_raw([1, 1], [1, 2]))
 
 References:
     Style guide: `Google Python Style Guide`_
@@ -39,24 +43,20 @@ Notes:
 
 from __future__ import annotations
 
-
+import doctest
 # Standard library imports
 from typing import Any
 
 # Third-party imports
 from pydantic import (BaseModel,
                       ConfigDict,
-                      Field, field_validator,
+                      Field,
                       model_validator,
-                      PrivateAttr, AliasChoices)
+                      PrivateAttr)
 
-from pydantic.dataclasses import dataclass
-
-from battleships.domain.position import coerce_position
 # Local application imports
-from src.battleships.domain.coordinate import Coordinate
-from src.battleships.domain.position import Position, POSITION_ALIASES, PositionField
-from src.utils.utils import clean_string, truthy_to_printable, JUST_L_WIDTH
+from src.battleships.domain.position import Position, PositionField
+from src.utils.utils import CleanText, JustifyText, Divider
 
 # Module-level constants
 
@@ -78,8 +78,8 @@ class ShipSpec(BaseModel):
     is_cloaked: bool = False
 
     def __str__(self):
-        return (f"{"Size":<{JUST_L_WIDTH}}{self.size} tiles\n"
-                f"{"Cloaked?":<{JUST_L_WIDTH}}{truthy_to_printable(self.is_cloaked)}")
+        return (JustifyText.kv('Size', f"{self.size} tiles")
+                + JustifyText.kv('Cloaked?', CleanText.truthy(self.is_cloaked)))
 
 
 class Ship(BaseModel):
@@ -104,9 +104,7 @@ class Ship(BaseModel):
 
     spec: 'ShipSpec'
     type: str
-    placement: PositionField = Field(
-        ...,
-        validation_alias=AliasChoices(*POSITION_ALIASES))
+    placement: PositionField = Field(...)
 
     _is_alive: bool = PrivateAttr(default=True)
     _is_placed: bool = PrivateAttr(default=False)
@@ -134,23 +132,11 @@ class Ship(BaseModel):
     def mark_placed(self):
         self._is_placed = True
 
-    def update_position(self, pos) -> None:
-        """"""
-        if isinstance(pos, Coordinate):
-            self.pos = pos
-        else:
-            self.pos = Coordinate(pos)
-        self._is_placed = True
-
     def __str__(self):
-        return (f"<Ship> {self.type}\n"
-                f"{'-' * 8}\n"
-                f"{self.pos}\n"
-                f"{self.spec}")
+        return (
+            Divider.section.make_title('Ship', details=self.type, width=1)
+            + str(self.placement) + str(self.spec))
 
-
-if __name__ == "__main__":
-    ship = Ship(spec=ShipSpec(size=5),
-                type='cruiser',
-                placement=[[1, 2], [2, 3]])
-    print(ship)
+# if __name__ == '__main__':
+#     ship = Ship(spec=ShipSpec(size=2), type='cruiser', placement=Position.from_raw([1, 1], [1, 2]))
+#     print(ship)
