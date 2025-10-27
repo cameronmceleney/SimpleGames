@@ -85,6 +85,9 @@ class Coordinate:
         object.__setattr__(self, 'x', x_)
         object.__setattr__(self, 'y', y_)
 
+    def as_tuple(self) -> coordinate_type:
+        return self.x, self.y
+
     def __iter__(self):
         yield self.x
         yield self.y

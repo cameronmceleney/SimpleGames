@@ -44,8 +44,9 @@ Notes:
 from __future__ import annotations
 
 import doctest
+from functools import cached_property
 # Standard library imports
-from typing import Any
+from typing import Any, Optional
 
 # Third-party imports
 from pydantic import (BaseModel,
@@ -104,6 +105,7 @@ class Ship(BaseModel):
 
     spec: 'ShipSpec'
     type: str
+    symbol: Optional[str] = None
     placement: PositionField = Field(...)
 
     _is_alive: bool = PrivateAttr(default=True)

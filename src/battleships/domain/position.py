@@ -67,7 +67,7 @@ from pydantic import (AliasChoices,
                       field_validator)
 
 # Local application imports
-from src.battleships.domain.coordinate import Coordinate, coerce_coordinate
+from src.battleships.domain.coordinate import Coordinate
 from src.utils.utils import JustifyText
 
 __all__ = [
@@ -133,12 +133,12 @@ class Position(BaseModel):
         # out: list[Coordinate] = []
         # for item in v:
         #     out.append(coerce_coordinate(item))
-        return tuple(coerce_coordinate(item) for item in seq)
+        return tuple(Coordinate.coerce(item) for item in seq)
 
     @classmethod
     def _from_single(cls, item: Any) -> position_type:
         try:
-            return (coerce_coordinate(item),)
+            return (Coordinate.coerce(item),)
         except Exception as e:
             raise ValueError(f"Invalid position: {item!r} ({e})") from e
 

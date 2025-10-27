@@ -43,15 +43,15 @@ from __future__ import annotations
 
 # Standard library imports
 from typing import Optional
+
 # Third-party imports
 
 # Local application imports
-from src.battleships.domain.board import Board
+from src.battleships.domain.board import BattleshipBoard as Board
 from src.battleships.domain.player import (
     Player,
     MESSAGES as PLAYER_MESSAGES)
-from src.battleships.domain.fleet import Fleet
-from src.battleships.domain.coordinates import Placement
+
 from src.log import get_logger
 
 log = get_logger(__name__)
@@ -70,7 +70,8 @@ class Battleships:
         players:            All players in the game.
     """
     players: list[Player]
-    _board_size: tuple[int, int]
+    board: Board
+
     _rosters_yaml = "config/rosters.yml"
 
     def __init__(
@@ -85,21 +86,19 @@ class Battleships:
         self.remaining_players: int = 0
         self._current_player_idx: int = 0
         self._current_player: Optional[Player] = None
-        self._board_size = board_size
+
+        self.board = Board(*board_size)
 
         if players_names is not None:
             self.add_players(*players_names)
 
         self._post_init(autoplay=autoplay)
 
-    @staticmethod
-    def _post_init(**kwargs):
-        if 'autoplay' in kwargs.keys() and kwargs['autoplay'] == True:
+    def _post_init(self, **kwargs):
+        if 'autoplay' in kwargs.keys() and kwargs['autoplay']:
             print("Working autoplay.")
-            board = Board(length=5, width=5)
-            board.show()
-
-            exit()
+            self.board.show()
+            exit(0)
 
     def add_players(self, *names: str) -> None:
         """Add a player to the game."""
@@ -140,13 +139,12 @@ class Battleships:
         print(player_input)
 
 
-
-
-
-
-if __name__ == '__main__':
+def _test_battleships() -> None:
     bs = Battleships(board_size=(4, 4), autoplay=False)
     bs.add_players("cameron", "karolina")
     # print(f"Players\n{bs.players}")
     bs.play()
 
+
+if __name__ == '__main__':
+    _test_battleships()

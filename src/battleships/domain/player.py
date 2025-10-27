@@ -52,8 +52,8 @@ from typing import Any
 # Local application imports
 from src.battleships.domain.fleet import Fleet
 from src.battleships.domain.board import Board
-from src.utils.utils import JUST_L_WIDTH, CONSOLE_DIVIDER, load_yaml
-from src.battleships.domain.coordinates import Guesses
+from src.utils.utils import JustifyText, Divider, load_yaml
+from src.battleships.domain.coordinate import Coordinate
 
 # Module-level constants
 PLAYER_FILE_PATH = "config/player.yml"
@@ -86,7 +86,7 @@ class Player(BaseModel):
 
     fleet: Fleet = Field(default_factory=lambda: Player._default_fleet())
     board: Board = Field(default_factory=lambda: Player._default_board())
-    shots: Guesses = Field(default_factory=lambda: Guesses())
+    shots: list[Coordinate] = Field(default_factory=list)
 
     _config_file: str | None = None
 

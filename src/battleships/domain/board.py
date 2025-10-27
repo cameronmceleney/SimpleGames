@@ -50,8 +50,7 @@ from __future__ import annotations
 # Standard library imports
 from dataclasses import dataclass, field
 from enum import StrEnum
-import os
-from typing import Any, ClassVar, Optional, Type
+from typing import Any, ClassVar, Literal, Optional, Type
 
 # Third-party imports
 import numpy as np
@@ -59,20 +58,33 @@ import numpy as np
 
 # Local application imports
 from src.battleships.settings import BoardSettings
-from src.battleships.domain.fleet import Fleet
-from src.battleships.domain.ship import Ship
 from src.utils.utils import CleanText, Divider, JustifyText
 from src.battleships.domain.coordinate import Coordinate
 from src.battleships.domain.position import Position
 
 
-# Module-level constants
+__all__ = [
+    'Symbols',
+    'Grid',
+    'Board',
+    'BattleshipBoard'
+]
+
+
 class Symbols(StrEnum):
-    """Symbols to denote ships and actions on the playing board."""
+    """Symbols to denote ships and actions on the playing board.
+
+    Attributes:
+        EMPTY: Alias ``space``.
+        HIT
+        MISS
+        VERTICAL_DIVIDER: Alias ``vd``.
+        HORIZONTAL_DIVIDER: Alias ``hd``.
+    """
     EMPTY = ' '
     HIT = '#'
     MISS = '/'
-    VERTICAL_DIVIDER = '-'
+    VERTICAL_DIVIDER = '–'
     HORIZONTAL_DIVIDER = '|'
 
     # Aliases
@@ -81,116 +93,179 @@ class Symbols(StrEnum):
     hd = HORIZONTAL_DIVIDER
 
 
-__all__ = ['Board']
+@dataclass(slots=True)
+class Grid:
+    """2D grid of mutable characters.
 
-
-@dataclass
-class Board:
-    """2D game board."""
-    length: int
+    Attributes:
+        height:
+        width:
+        grid:
+        symbols:
+    """
+    height: int
     width: int
     grid: np.ndarray = field(init=False, repr=False)
 
-    _symbols: ClassVar[Type[Symbols]] = Symbols
+    symbols: ClassVar[Type[Symbols]] = Symbols
 
     def __post_init__(self):
-        """Initialise grid after dataclass is constructed."""
-        # Initial grid of zeros is easily created using `reset` method.
-        self.grid = self.reset_grid()
+        self.grid = self._new_grid()
 
-    def reset_grid(self, inplace: bool = False) -> Optional[np.ndarray]:
-        """Create a zeroed grid.
+    def _new_grid(self) -> np.ndarray:
+        """Allocate a new grid."""
+        return np.full(shape=(self.height, self.width),
+                       fill_value=self.symbols.EMPTY,
+                       dtype='U1')  # 1-character unicode cells
 
-        Arguments:
-            inplace: If `True`, update ``self.grid``. Otherwise, return a new grid.
-        """
-        grid = np.full(shape=(self.length, self.width),
-                       fill_value=self._symbols.EMPTY,
-                       dtype='U1')
+    def reset(self, inplace: bool = True) -> Optional[np.ndarray]:
+        """Reset the board to EMPTY."""
+        new_grid = self._new_grid()
 
         if inplace:
-            self.grid = grid
+            self.grid = new_grid
             return None
 
-        return grid
+        return new_grid
 
-    def clone(self) -> "Board":
-        """Clone a board."""
-        b = Board(self.length, self.width)
-        b.grid = self.grid.copy()
-        return b
+    def clone(self) -> 'Grid':
+        """Deep copy the board including the grid."""
+        g = Grid(self.height, self.width)
+        g.grid = self.grid.copy()
+        return g
 
-    def show(self, has_dividers: bool = True) -> None:
-        """Print the current grid-state."""
-        output: str = "\n"
-        _horizontal_line = f"{self._symbols.vd * (self.width * 2 + 2)}\n"
 
-        if has_dividers:
-            indent = f"{' ' * 4}"
-        else:
-            indent = f"{' ' * 2}"
+@dataclass(slots=True)
+class Board(Grid):
+    """2D game board with bounds-checked cell access and rendering.
 
-        col_nums: str = '' + indent
+    This class contains methods general to all 2D board games.
 
-        for c, row in enumerate(self.grid):
-            output += CleanText.bf(chr(65 + c)) + self._symbols.space
-            col_nums += CleanText.bf(c) + self._symbols.space
+    Attributes:
+        height:
+        width:
+        grid:
+        symbols:
+    """
+    ...
 
-            if has_dividers:
-                output += self._symbols.hd + self._symbols.space
+    def in_bounds(self, coord_like: Any) -> bool:
+        """Check if a coordinate is within the grid."""
+        coord = Coordinate.coerce(coord_like)
+        x, y = coord.as_tuple()
+        return (0 <= x < self.height) and (0 <= y < self.width)
 
-            for sym in row:
-                output += str(sym) + ' '
-            output += '\n'
+    def require_in_bounds(self, c: Any) -> None:
+        coord = Coordinate.coerce(c)
+        if not self.in_bounds(coord):
+            raise IndexError(f"Coordinate is out of bounds: {coord.as_tuple()} "
+                             f"<Board(height={self.height}, "
+                             f"width={self.width})>")
 
-        if has_dividers:
-            dividers = " ".join([self._symbols.vd for _ in range(0, self.length)])
-            output += indent + dividers + '\n'
+    def get(self, coord_like: Any) -> str:
+        """Read a cell.
 
-        output += col_nums + '\n'
-
-        print(output)
-
-    def add_shot(self, shot: Any) -> "Coordinate | None":
-        """Safely load a shot onto the game board.
-
-        Only add a shot if the following conditions are true for the targeted
-        tile:
-            - it's empty, or
-            - it's occupied by an unhit shit tile.
+        Return a Python scalar, not NumPy!
         """
-        coord = Coordinate.coerce(shot)
+        coord = Coordinate.coerce(coord_like)
+        self.require_in_bounds(coord.as_tuple())
+        return self.grid.item(coord.as_tuple())
 
-        self.grid[coord] = self._symbols.HIT
-        self.show(has_dividers=False)
-        return coord
+    def set(self, coord_like: Any, symbol: str) -> None:
+        """Write to a cell."""
+        coord = Coordinate.coerce(coord_like)
+        self.require_in_bounds(coord)
 
-    def add_ship(self, *ship: Ship | Position) -> None:
-        """Load a ship onto the game board.
+        if not (isinstance(symbol, str) and len(symbol) == 1):
+            raise ValueError(f"Symbol must be single character, got: {symbol!r}")
 
-        Can take any number of ships.
+        self.grid[coord.as_tuple()] = symbol
 
-        Arguments:
-            ship:           Ship to load.
+    def render(
+        self,
+        show_guides: bool = True,
+        *,
+        row_symbols: Literal['let', 'num'] = 'let',
+        col_symbols: Literal['let', 'num'] = 'num'
+    ) -> str:
+        """Render a string view of the current board-state."""
+        lines: list[str] = []
+        start_char = 65  # chr(65) = 'A'
+
+        # Set column symbols and padding
+        pad: str = self.symbols.EMPTY * (4 if show_guides else 2)
+
+        match col_symbols:
+            case 'let':
+                cid_iters = (chr(start_char + j) for j in range(self.width))
+            case 'num':
+                cid_iters = (str(j) for j in range(self.width))
+            case _:
+                raise ValueError(f"Invalid col_symbols.")
+
+        col_ids = self.symbols.EMPTY.join(cid_iters)
+
+        # Begin rendering Board
+        if show_guides:
+            lines.append(pad + col_ids)
+
+        # Generate each row of the grid with its identifier
+        for i in range(self.height):
+            row = self.grid[i]
+            if show_guides:
+                # Add row label to grid starting from 'A'
+                match row_symbols:
+                    case 'let': rid = chr(start_char + i)
+                    case 'num': rid = i
+                    case _: raise ValueError(f"Invalid row_symbol)")
+
+                lines.append(f"{rid}{self.symbols.space}"
+                             f"{self.symbols.hd}{self.symbols.EMPTY}"
+                             f"{self.symbols.EMPTY.join(row)}")
+            else:
+                lines.append(self.symbols.EMPTY.join(row))
+
+        if show_guides:
+            hline = (self.symbols.vd + self.symbols.EMPTY) * self.width
+            lines.insert(1, pad + hline)
+
+        return '\n'.join(lines) + '\n'
+
+
+@dataclass(slots=True)
+class BattleshipBoard(Board):
+    """2D battleship game board as a grid of mutable characters.
+
+    This class contains high-level helpers specific to Battleships games.
+
+    Attributes:
+        height:
+        width:
+        grid:
+        symbols:
+    """
+
+    def mark_hit(self, c: Any) -> None:
+        self.set(c, self.symbols.HIT)
+
+    def mark_miss(self, c: Any) -> None:
+        self.set(c, self.symbols.MISS)
+
+    def place(self, pos: Any, symbol: str = 'S') -> None:
+        """Place a multi-cell object onto the board.
+
+        To place a ship do ``obj.place(ship.position, ship.symbol)``.
         """
-        for s in ship:
-            if isinstance(s, Ship):
-                self.add_guess(s.pos, s.type[0].upper())
-            if isinstance(s, Position):
-                self.add_guess(s, 'S')
+        p = Position.coerce(pos)
 
-    def add_guess(self, coord: Coord | Placement, symbol: str = 'T'):
-        """Add a guess to the game board."""
-        if isinstance(coord, type(Coord)):
-            self.grid[coord] = symbol
-            return
+        for coord in p.positions:
+            self.set(coord, symbol)
 
-        if isinstance(coord, Placement):
-            for pos in coord.positions:
-                self.grid[pos] = symbol
-            return
+    def show(self, *, show_guides: bool = True) -> None:
+        print(self.render(show_guides=show_guides,
+                          row_symbols='let', col_symbols='num'))
 
-    def __str__(self, print_headers: bool = True):
+    def __repr__(self, print_headers: bool = True):
 
         msg = Divider.console if print_headers else ""
         msg += Divider.console.make_title('Board')
@@ -201,3 +276,30 @@ class Board:
             msg += JustifyText.kv(key.capitalize(), val)
 
         return msg + (Divider.console if print_headers else "")
+
+    def __str__(self) -> str:
+        """Return `str(self)`.
+
+        Render a string view of the current board."""
+        return self.render(show_guides=True,
+                           row_symbols='let', col_symbols='num')
+
+
+def _test_battleship_board() -> None:
+    """Basic tests to check grid creation and rendering."""
+    board = BattleshipBoard(height=8, width=8)
+    board.show(show_guides=True)
+
+    assert board.grid.shape == (8, 8), f"Unexpected shape: {board.grid.shape}"
+    assert np.all(board.grid == board.symbols.EMPTY), "Grid not initialised to empty."
+
+    rendered = board.render(show_guides=True)
+    assert isinstance(rendered, str), f"Unexpected type: {type(rendered)}"
+    assert "A" in rendered and "0" in rendered, f"Missing row/column headers:"
+    assert rendered.count(board.symbols.EMPTY) > 0, "Expected EMPTY spaces in rendering"
+
+    print(CleanText.bf("All tests passed"))
+
+
+if __name__ == '__main__':
+    _test_battleship_board()
