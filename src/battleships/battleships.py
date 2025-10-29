@@ -129,7 +129,7 @@ class Battleships:
         a guess) at the enemy's position.
         """
         while self.remaining_players > 1:
-            self._current_player.take_turn()
+            self._current_player.take_turn(self.players[1])
             Player.end_turn()
 
     def _allow_guess(self, idx: int):

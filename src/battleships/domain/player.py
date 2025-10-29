@@ -152,7 +152,7 @@ class Player(BaseModel):
         player_data = load_yaml(filepath if filepath else {})
         log.debug(player_data)
 
-        self.fleet.apply_player_positions(player_data)
+        self.fleet.apply_placements(player_data)
         self.place_fleet()
 
     def place_fleet(self, *, symbol_strategy: str = 'initial') -> None:
@@ -236,7 +236,7 @@ class Player(BaseModel):
         return outcome
 
     def record_shot(self, shot: Coordinate) -> None:
-        self._shots.append(shot)
+        self.shots.append(shot)
 
     @staticmethod
     def end_turn() -> None:
@@ -250,7 +250,7 @@ class Player(BaseModel):
 
         msg += Divider.console.make_title('Player', {self.name})
 
-        msg += self.fleet.__str__(print_headers=False)
+        msg += repr(self.fleet)
         msg += Divider.console
         msg += repr(self.board)
         msg += Divider.console

@@ -121,33 +121,6 @@ class Position(BaseModel):
         # Last chance
         return cls._from_single(v)
 
-    @classmethod
-    def _from_mapping(cls, m: Mapping[str, Any]) -> position_type:
-        keys = [k for k in POSITION_ALIASES if k in m]
-        if not keys:
-            raise ValueError('message')
-
-        if len(keys) > 1:
-            raise ValueError(f"Too many position keys.")
-
-        m = m[keys[0]]  # Required to select mapping
-        return cls._coerce_positions(m)
-
-    @classmethod
-    def _from_sequence(cls, seq: Sequence[Any]) -> position_type:
-        # Let `Coordinate` handle inner items.
-        # out: list[Coordinate] = []
-        # for item in v:
-        #     out.append(coerce_coordinate(item))
-        return tuple(Coordinate.coerce(item) for item in seq)
-
-    @classmethod
-    def _from_single(cls, item: Any) -> position_type:
-        try:
-            return (Coordinate.coerce(item),)
-        except Exception as e:
-            raise ValueError(f"Invalid position: {item!r} ({e})") from e
-
     @field_validator('positions', mode='after')
     @classmethod
     def _ensure_unique(cls, positions: position_type) -> position_type:
@@ -173,6 +146,37 @@ class Position(BaseModel):
         raise ValueError(f"Duplicate coordinates not allowed: {duplicates!r}")
 
     @classmethod
+    def _extract_coords_from_mapping(cls, m: Mapping[str, Any]):
+        keys = [k for k in POSITION_ALIASES if k in m]
+        if not keys:
+            raise ValueError('No position (or valid alias) key found.')
+
+        if len(keys) > 1:
+            raise ValueError(f"Too many position keys.")
+
+        return m[keys[0]]  # indexing required
+
+    @classmethod
+    def _from_mapping(cls, m: Mapping[str, Any]) -> position_type:
+        """Generate from a mapping of position-like objects."""
+        return cls._coerce_positions(
+            cls._extract_coords_from_mapping(m)
+        )
+
+    @classmethod
+    def _from_sequence(cls, seq: Sequence[Any]) -> position_type:
+        """Generate from a sequence of position-like objects."""
+        return tuple(Coordinate.coerce(item) for item in seq)
+
+    @classmethod
+    def _from_single(cls, item: Any) -> position_type:
+        """Attempt to generate from a single position-like object."""
+        try:
+            return (Coordinate.coerce(item),)
+        except Exception as e:
+            raise ValueError(f"Invalid position: {item!r} ({e})") from e
+
+    @classmethod
     def from_raw(cls, *coords_like: Any) -> Position:
         """Convenience builder.
 
@@ -184,6 +188,37 @@ class Position(BaseModel):
                          used to create ``Coordinate`` objects.
         """
         return cls(positions=coords_like)
+
+    @classmethod
+    def from_node(cls, node: Mapping[str, Any], *, index: int) -> 'Position':
+        """Extract a position from a per-type node.
+
+        Required when generating ``Position`` objects from configuration files.
+
+        Arguments:
+            node: Input data
+            index: Ordinal index to identify which data should be extracted if
+                   the mapping is one-to-many.
+        """
+        if not isinstance(node, Mapping):
+            raise TypeError(f"Expected mapping node, "
+                            f"but got {type(node).__name__}.")
+
+        payload = cls._extract_coords_from_mapping(node)
+
+        if isinstance(payload, list):
+            try:
+                part = payload[index]
+            except IndexError:
+                raise IndexError(f"No placement at index {index!r} "
+                                 f"(len={len(payload)}).")
+            return cls(positions=part)
+
+        if index != 0:
+            raise ValueError(f"Single placement provided "
+                             f"but index={index} requested.")
+
+        return cls(positions=payload)
 
     @classmethod
     def coerce(cls, v: Any) -> 'Position':

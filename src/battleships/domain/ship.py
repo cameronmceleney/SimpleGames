@@ -43,15 +43,15 @@ Notes:
 
 from __future__ import annotations
 
-import doctest
-from functools import cached_property
 # Standard library imports
-from typing import Any, Optional
+from typing import Any, Mapping, Optional
 
+import yaml
 # Third-party imports
 from pydantic import (BaseModel,
                       ConfigDict,
                       Field,
+                      field_validator,
                       model_validator,
                       PrivateAttr)
 
@@ -90,11 +90,9 @@ class Ship(BaseModel):
     a given ship to create a valid ``Ship`` instance.
 
     Attributes:
-        spec:               Ship's specification.
-
-        type:                 Tag.
-
-        position:                Position of the ship on the playing board.
+        spec: Ship's specification.
+        type: Type such as *cruiser* which is used to create dict-keys.
+        placement: Positions on the board occupied by this ship.
 
         _is_alive:          Tracks whether the ship has been destroyed.
 
@@ -105,36 +103,87 @@ class Ship(BaseModel):
 
     spec: 'ShipSpec'
     type: str
+    index: int  # Ordinal within its type in its fleet.
     symbol: Optional[str] = None
     placement: Optional[PositionField] = None
 
     _is_alive: bool = PrivateAttr(default=True)
-    _is_placed: bool = PrivateAttr(default=False)
 
-    @model_validator(mode='after')
-    def _check_size(self) -> 'Ship':
-        if self.placement.size != self.spec.size:
+    @field_validator('placement', mode='before')
+    @classmethod
+    def _coerce_placement(cls, v: Any, info) -> Optional[Position]:
+        """"""
+        if v is None:
+            return None
+
+        # Select this ship's slice from the full node mapping
+        if isinstance(v, Mapping):
+            idx = info.data.get('index')
+            if idx is None:
+                return Position.coerce(v)  # Temporary fallback
+            return Position.from_node(v, index=int(idx))
+
+        #
+        return Position.coerce(v)
+
+    @field_validator('placement', mode='after')
+    @classmethod
+    def _check_size(cls, placement: Optional[Position], info) -> Optional[Position]:
+        if placement is None:
+            return None
+
+        self: 'Ship' = info.data
+        if placement.size != self.spec.size:
             raise ValueError(
                 f"Ship '{self.type}' expects {self.spec.size} tiles,"
                 f"but got {self.placement.size}."
             )
+
+        return placement
+
+    def load_placement(
+            self, raw_node_or_coord_like: Any, index: Optional[int] = None
+    ) -> 'Ship':
+        """Assign placement for this Ship.
+
+        If a per-node type is provided, then use `self.index` unless `index` is
+        provided.
+
+        Arguments:
+            raw_node_or_coord_like:
+            index:
+        """
+        if isinstance(raw_node_or_coord_like, Mapping):
+            use_index = self.index if index is None else index
+            self.placement = Position.from_node(raw_node_or_coord_like, index=use_index)
+        else:
+            self.placement = raw_node_or_coord_like  # triggers validator
+
         return self
 
     @property
+    def remaining_tiles(self) -> int:
+        """Tiles not yet hit within this ship's placement."""
+        # TODO: Swap in proper hit-tracking logic.
+        if self.placement is None:
+            self._is_alive = False
+            return 0
+
+        return self.spec.size
+
+    @property
     def is_alive(self) -> bool:
+        """Whether this ship is currently alive."""
         return self._is_alive
 
     def mark_destroyed(self) -> None:
+        """Forcefully mark this ship as destroyed."""
         self._is_alive = False
 
-    @property
-    def is_placed(self) -> bool:
-        return self._is_placed
+    def __str__(self) -> str:
+        return f"<{self.__class__.__name__}.{self.type!r}: {self.symbol}>"
 
-    def mark_placed(self):
-        self._is_placed = True
-
-    def __str__(self):
+    def __repr__(self):
         return (
             Divider.section.make_title('Ship', details=self.type, width=1)
             + str(self.placement) + str(self.spec))
