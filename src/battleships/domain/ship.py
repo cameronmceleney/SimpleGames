@@ -106,7 +106,7 @@ class Ship(BaseModel):
     spec: 'ShipSpec'
     type: str
     symbol: Optional[str] = None
-    placement: PositionField = Field(...)
+    placement: Optional[PositionField] = None
 
     _is_alive: bool = PrivateAttr(default=True)
     _is_placed: bool = PrivateAttr(default=False)

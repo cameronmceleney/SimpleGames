@@ -40,14 +40,19 @@ Notes:
 from __future__ import annotations
 
 # Standard library imports
-from typing import Any, Mapping
+from typing import Any, Mapping, Optional
 
 # Third-party imports
 from pydantic import (
     BaseModel,
     ConfigDict,
-    Field)
+    Field,
+    model_validator,
+    PrivateAttr, ValidationError)
+from yaml import YAMLError
+from yaml.representer import RepresenterError
 
+from battleships.domain.position import Position
 # Local application imports
 from src.battleships.domain.ship import ShipSpec, Ship
 from src.utils.utils import load_yaml, JustifyText, Divider
@@ -62,9 +67,14 @@ __all__ = ['Fleet']
 
 
 class Roster(BaseModel):
-    """Named set of ship specs.
+    """Named set of ship specs loaded from a configuration file.
 
     Used to build a `Fleet`.
+
+    Expected shape of the configuration file:
+        <id>:
+            <roster>:
+                <ship_type>: { size: <int>, is_cloaded: <bool, optional> }
 
     Attributes:
         id:           Unique ID given to this roster in *rosters.yml*.
@@ -88,141 +98,230 @@ class Roster(BaseModel):
         TODO:
             - Update this method to generate a `ShipSpec` as it doesn't set `ShipSpec.type`.
         """
-        cls.id = id_
-        roster_yaml = load_yaml(filepath)
-        # log.info(f"Roster | load_from_yaml({id_})\n{'-'*16}\n{root}\n\n")
+        data = load_yaml(filepath)
+        node = data.get(id_)
 
-        try:
-            root = roster_yaml.get(id_)
-        except KeyError as e:
-            raise f"Couldn't find this id {id_}."
-        else:
-            ship_nodes = root['roster']
+        if node is None:
+            raise KeyError(f"Roster ID '{id_!r}' wasn't found at '{filepath!r}'")
 
-        ships = {}
-        for name, spec in ship_nodes.items():
-            ships[name] = ShipSpec(**spec)
+        if 'roster' not in node or not isinstance(node['roster'], Mapping):
+            raise YAMLError(f"Roster id '{id_!r}' must contain a mapping"
+                            f"under the 'roster' key.")
+
+        ships: dict[str, ShipSpec] = {}
+        for name, ship_spec_node in node['roster'].items():
+            if not isinstance(ship_spec_node, Mapping):
+                raise YAMLError(f"Roster ID '{id_!r}' entry '{name!r}' must be"
+                                f"a mapping of valid 'ShipSpec' fields.")
+            else:
+                ships[name] = ShipSpec(**ship_spec_node)
 
         return cls(id=id_, ships=ships)
 
     def __str__(self):
+        return f"{self.__class__.__name__}(id={self.id}, ships={self.ships})"
+
+    def __repr__(self) -> str:
         msg = Divider.section.make_title('Roster', self.id, wrap=True)
-        for k, val in self.ships.items():
-            key = f"'{k}'"
-            msg += JustifyText.kv(key, val, value_repr=True)
+        for type_, spec_ in self.ships.items():
+            msg += JustifyText.kv(f"'{type_}'", spec_, value_repr=True)
 
         return msg + Divider.console
 
 
 class Fleet(BaseModel):
-    """All ships used by a player during a game of Battleships.
+    """All ships used by a player in Battleships.
 
     A fleet is a set of ship types.
 
+    Expected shape of the configuration file:
+        <fleet_id>:
+            roster: <roster_id>
+            ships:
+            <ship_type>: { quantity: <int> }
+
     Attributes:
-        id:             Unique tag for this fleet.
+        id: Unique identifier for this fleet.
+        roster: Roster used to instance fleet's ``ShipSpec``.
+        ships: Concrete ``Ship`` objects keyed as `<type>_<index>`.
+        counts: Quantities for each ship type.
 
-        ships:         All ships used by this fleet.
-
-        counts:         Number of each ship type.
+    TODO:
+        - Add explicit model validator so `load_from_yaml` can just return `cls`
+        - Turn `_remaining_tiles` into a computed file that is decremented whenever a hit is registered.
+        - Split `Fleet.load_from_yaml()` into smaller, more meaningful methods (private and/or public)
     """
     model_config = ConfigDict(frozen=True, validate_default=True)
 
     id: str
+    roster: Roster
     ships: dict[str, Ship] = Field(default_factory=dict)
-    roster: Roster = Field(default_factory=lambda r: Roster(id=''))
-    counts: dict[str, int] = Field(default_factory=dict, init=False, repr=False)
+    counts: dict[str, int] = Field(default_factory=dict)
 
-    _remaining_tiles: int = 0
+    remaining_tiles: int = PrivateAttr(default=0)
+
+    @model_validator(mode='after')
+    def _check_counts_against_roster(self) -> 'Fleet':
+        """Ensure counts reference only known roster types and ship counts match."""
+        unknown = [s for s in self.counts if s not in self.roster.ships]
+        if unknown:
+            raise ValueError(f"<{self.__class__.__name__}> 'counts'"
+                                  f"references unknown ship types: {unknown!r}")
+
+        # Check loading of `Ship`
+        expected_total = sum(self.counts.values())
+        loaded_total = len(self.ships)
+        if loaded_total != expected_total:
+            raise ValueError(f"<{self.__class__.__name__}.{self.id!r}> "
+                             f"loaded [{loaded_total}] ships "
+                             f"but counts sum to [{expected_total}].")
+
+        # Check loading of each type
+        per_type = {}
+        for k, ship in self.ships.items():
+            per_type[ship.type] = per_type.get(ship.type, 0) + 1
+
+        for type_, required_quantity in self.counts.items():
+            loaded_counts = per_type.get(type_, 0)
+            if loaded_counts != required_quantity:
+                raise ValueError(f"<{self.__class__.__name__}.{self.id!r}> "
+                                 f"loaded '{loaded_counts}' of '{type_}' "
+                                 f"but counts expected are "
+                                 f"[{required_quantity}].")
+
+        return self
 
     @property
     def is_alive(self) -> bool:
         """Check if this fleet has at least one remaining tile to be sunk."""
-        return True if self._remaining_tiles > 0 else False
+        return self.remaining_tiles > 0
 
     @classmethod
     def load_from_yaml(
             cls,
             *,
             fleet_id: str,
+            roster_filepath: str = 'config/rosters.yml',
             fleet_filepath: str = "config/fleet.yml",
-            settings=None
+            settings: Optional[Any] = None
     ) -> 'Fleet':
         """Load a fleet from the YAML configuration file.
 
-        Shape of each entry in the fleet YAML file should be:
-            roster: <id>
-            ships:
-                <name>: {ship spec entries...}
-
         Arguments:
-            fleet_id:           Text.
-
-            fleet_filepath:     Text.
-
-            settings:           Game settings (not yet implemented)
+            fleet_id: Fleet identifier; top-level key from the configuration file.
+            roster_filepath: Relative path to the configuration file.
+            fleet_filepath: Relative path to the configuration file.
+            settings: Game settings (not yet implemented)
         """
+        # Extract target fleet from the configuration file
+        fleets = load_yaml(fleet_filepath)
+        log.debug(fleets.items())
 
-        fleet_config = load_yaml(fleet_filepath)
-        fleet_props = fleet_config.get(fleet_id)
+        fleet_node = fleets.get(fleet_id)
+        if fleet_node is None:
+            raise YAMLError(f"Flet id '{fleet_id!r}' wasn't found at '{fleet_filepath}'.")
 
-        raw_counts = fleet_props.get('ships', {})
-        counts = {name: int(node.get('quantity')) for name, node in raw_counts.items()}
+        roster_id = fleet_node.get('roster')
+        if not roster_id:
+            raise ValueError(f"Fleet '{fleet_id!r}' is missing a 'roster' key.")
 
-        roster = Roster.load_from_yaml(id_=fleet_props.get('roster'))
+        # Load roster and quantities of each ship from the configuration files.
+        roster = Roster.load_from_yaml(roster_id, filepath=roster_filepath)
         log.debug(roster.ships)
 
+        raw_ship_counts = fleet_node.get('ships', {})
+        if not isinstance(raw_ship_counts, Mapping):
+            raise YAMLError("'Ship' keys must be mappings from "
+                            "<ship_type: { quantity: <int> }>")
+        log.debug(raw_ship_counts)
+
+        counts: dict[str, int] = {}
+        for name, node in raw_ship_counts.items():
+            try:
+                quantity = int(node.get('quantity'))
+            except Exception as e:
+                raise f"<Fleet> <{fleet_id!r}.{name!r}> Ship has a missing/invalid quantity."
+
+            if quantity < 0:
+                raise YAMLError(f"<Fleet> <{fleet_id!r}.{name!r}> Has a negative quantity.")
+            counts[name] = quantity
+
+        # Build each `Ship` object from roster.yml + fleet.yml config files.
         ships: dict[str, Ship] = {}
 
-        for ship_type, spec in roster.ships.items():
+        for ship_type, ship_spec in roster.ships.items():
             quantity = counts.get(ship_type, 0)
-            for q in range(quantity):
-                key = f"{ship_type}_{q}"
-                ships[key] = Ship(spec=spec, type=ship_type)
+            for i in range(quantity):
+                ships[f"{ship_type}_{i}"] = Ship(spec=ship_spec, type=ship_type)
 
-        return cls.model_validate({'id': fleet_id,
-                                   'ships': ships,
-                                   'roster': roster,
-                                   'counts': counts},
-                                  context=settings)
+        fleet = cls.model_validate({'id': fleet_id, 'roster': roster,
+                                    'ships': ships, 'counts': counts},
+                                   context=settings)
 
-    def apply_player_positions(self, player_data: Mapping[str, Any]) -> None:
-        """"""
-        track_counts = {t: 0 for t in self.counts}
+        fleet._remaining_tiles = sum(s.spec.size for s in fleet.ships.values())
 
+        return fleet
+
+    def apply_placements(self, player_data: Mapping[str, Any]) -> None:
+        """Attach placements to each ship from a player's mapping.
+
+        Expected shape for each ship-type in the configuration files:
+            <ship_type>:
+                position: <coords-like>
+
+        Arguments:
+            player_data:
+        """
+        # Track placements per ship_type that have been used
+        placed_ships: dict[str, int] = {key: 0 for key in self.counts}
+
+        # TODO. Replace `raw_list` block with call to ``Ship.load_placements``
         for ship_type, node in player_data.items():
-            if ship_type not in self.counts:
-                raise ValueError(f"Unknown ship type: {ship_type}")
+            raw_list = (
+                node.get('position')
+                if isinstance(node, Mapping) and 'position' in node
+                else node.get('positions')
 
-            if "position" in node:
-                raw_list = node["position"]
-            elif "positions" in node:
-                raw_list = node["positions"]
-            else:
-                raise ValueError(f"{ship_type}: missing positions.")
+                if isinstance(node, Mapping) and 'positions' in node
+                else None
+            )
+
+            if raw_list is None:
+                raise ValueError(f"'{ship_type!r}': missing positions list.")
 
             for raw in raw_list:
-                idx = track_counts[ship_type]
+                idx = placed_ships[ship_type]
                 if idx >= self.counts[ship_type]:
-                    raise ValueError(f"Too many positions for ship type: {ship_type}.")
+                    raise ValueError(f"Ship '{ship_type!r}' has too many placed instances.")
 
                 key = f"{ship_type}_{idx}"
-                self.ships[key].update_position(raw)
-                track_counts[ship_type] += 1
+                pos = Position.coerce(raw)
+                self.ships[key].placement = pos  # TODO: Change to use actual method
+                placed_ships[key] += 1
 
-        missing = [t for t, need in self.counts.items() if track_counts.get(t, 0) != need]
+        # Ensure all declared `Ship`s have a placement
+        missing = [t for t, need in self.counts.items()
+                   if placed_ships.get(t, 0) != need]
+
         if missing:
-            raise ValueError(f"Missing positions for ship type: {', '.join(missing)}")
+            raise ValueError(f"Missing positions for ship type(s): "
+                             f"{', '.join(missing)!r}")
 
-    def __call__(self, ship: str) -> Ship:
-        return self.ships[ship]
+        self._remaining_tiles = sum(s.spec.size for s in self.ships.values())
 
-    def __str__(self, print_headers: bool = True):
+    def __call__(self, ship_name: str) -> Ship:
+        return self.ships[ship_name]
 
-        msg = Divider.console if print_headers else ""
+    def __str__(self) -> str:
+        return f"<{self.__class__.__name__}.{self.id!r}>"
+
+    def __repr__(self, print_headers: bool = True):
+
+        msg = Divider.console if print_headers else ''
         msg += Divider.console.make_title('Fleet', self.id)
 
         for k, val in self.ships.items():
             msg += JustifyText.kv(f"'{k}'", val, value_repr=True)
 
-        return msg + (Divider.console if print_headers else "")
+        msg += (Divider.console if print_headers else "")
+        return msg

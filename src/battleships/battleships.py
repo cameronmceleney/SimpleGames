@@ -47,7 +47,7 @@ from typing import Optional
 # Third-party imports
 
 # Local application imports
-from src.battleships.domain.board import BattleshipBoard as Board
+from src.battleships.domain.board import BattleshipBoard
 from src.battleships.domain.player import (
     Player,
     MESSAGES as PLAYER_MESSAGES)
@@ -70,7 +70,7 @@ class Battleships:
         players:            All players in the game.
     """
     players: list[Player]
-    board: Board
+    board: BattleshipBoard
 
     _rosters_yaml = "config/rosters.yml"
 
@@ -87,7 +87,7 @@ class Battleships:
         self._current_player_idx: int = 0
         self._current_player: Optional[Player] = None
 
-        self.board = Board(*board_size)
+        self.board = BattleshipBoard(*board_size)
 
         if players_names is not None:
             self.add_players(*players_names)

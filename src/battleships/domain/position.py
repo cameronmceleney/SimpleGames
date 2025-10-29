@@ -87,6 +87,12 @@ class Position(BaseModel):
     """A ship's placement on a 2D grid.
 
     Represents an ordered, immutable sequence of ``Coordinate`` objects.
+
+    Attributes:
+        positions:
+
+    TODO:
+        - Add a `load_from_yaml` helper
     """
     model_config = ConfigDict(frozen=True, validate_default=True)
 
@@ -156,9 +162,12 @@ class Position(BaseModel):
         # Find duplicate coordinates to generate useful error message
         seen: set[Coordinate] = set()
         duplicates: list[Coordinate] = []
+
         for coord in positions:
-            if coord in seen: duplicates.append(coord)
-            else: seen.add(coord)
+            if coord in seen:
+                duplicates.append(coord)
+            else:
+                seen.add(coord)
 
         duplicates.sort(key=lambda c: (c.x, c.y))
         raise ValueError(f"Duplicate coordinates not allowed: {duplicates!r}")
