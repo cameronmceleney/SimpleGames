@@ -54,6 +54,7 @@ from pydantic import (BaseModel,
                       field_validator,
                       model_validator,
                       PrivateAttr)
+from pydantic_core.core_schema import ValidationInfo
 
 # Local application imports
 from src.battleships.domain.position import Position, PositionField
@@ -68,19 +69,49 @@ class ShipSpec(BaseModel):
     """Base property used to define all ships.
 
     Attributes:
-        size:           Number of tiles/squares spanned by the ship.
-
-        is_cloaked:     If ``True``, **ship is not displayed with markers**,
-                        after being hit, for the opposing player/players.
+        size: Number of tiles/squares spanned by the ship.
+        is_cloaked: If ``True``, **ship is not displayed with markers**,
+                    after being hit, for the opposing player/players.
+        default_symbol: Single character used to represent the ship.
+        type: Category of ship (e.g. cruiser) which also dictates what concrete
+              instances of this ShipSpec instance are called during the game.
     """
     model_config = ConfigDict(frozen=True, validate_default=True)
 
     size: int = Field(..., gt=0)
     is_cloaked: bool = False
+    symbol: Optional[str] = Field(None, min_length=1, max_length=1)
 
-    def __str__(self):
-        return (JustifyText.kv('Size', f"{self.size} tiles")
-                + JustifyText.kv('Cloaked?', CleanText.truthy(self.is_cloaked)))
+    type_name: str = Field(..., min_length=1)
+
+    @field_validator('symbol', mode='before')
+    @classmethod
+    def _validate_symbol(cls, v: Optional[str], info: ValidationInfo) -> str | None:
+        if v is None:
+            t = info.data.get('type_name')
+            if isinstance(t, str) and t:
+                return t[0].upper()
+            return None
+
+        # Coerce to string and enforce 1 char
+        v = str(v)
+
+        if len(v) != 1:
+            raise ValueError(f"Symbol must be a single character "
+                             f"but got {v!r}")
+
+        return v
+
+    def __str__(self) -> str:
+        return f"<{self.__class__.__name__} '{self.type_name}'> (size={self.size})"
+
+    def __repr__(self):
+        return (
+            JustifyText.kv('Type', f"{self.type_name}")
+            + JustifyText.kv('Size', f"{self.size} tiles")
+            + JustifyText.kv('Cloaked?', CleanText.truthy(self.is_cloaked))
+            + JustifyText.kv('Symbol', self.symbol or '-')
+        )
 
 
 class Ship(BaseModel):
@@ -91,7 +122,8 @@ class Ship(BaseModel):
 
     Attributes:
         spec: Ship's specification.
-        type: Type such as *cruiser* which is used to create dict-keys.
+        index: Ordinal of this Ship within its type. This lets `Fleet`
+               uniquely identify ships that share a common `ShipSpec`.
         placement: Positions on the board occupied by this ship.
 
         _is_alive:          Tracks whether the ship has been destroyed.
@@ -102,17 +134,15 @@ class Ship(BaseModel):
     model_config = ConfigDict(frozen=False, validate_default=True)
 
     spec: 'ShipSpec'
-    type: str
-    index: int  # Ordinal within its type in its fleet.
+    index: int
     symbol: Optional[str] = None
     placement: Optional[PositionField] = None
 
-    _is_alive: bool = PrivateAttr(default=True)
+    _hits: list[bool] = PrivateAttr(default_factory=list)
 
     @field_validator('placement', mode='before')
     @classmethod
-    def _coerce_placement(cls, v: Any, info) -> Optional[Position]:
-        """"""
+    def _coerce_placement(cls, v: Any, info: ValidationInfo) -> Position | None:
         if v is None:
             return None
 
@@ -123,23 +153,28 @@ class Ship(BaseModel):
                 return Position.coerce(v)  # Temporary fallback
             return Position.from_node(v, index=int(idx))
 
-        #
         return Position.coerce(v)
 
-    @field_validator('placement', mode='after')
-    @classmethod
-    def _check_size(cls, placement: Optional[Position], info) -> Optional[Position]:
-        if placement is None:
-            return None
+    @model_validator(mode='after')
+    def _sync_placement_and_hits(self) -> 'Ship':
+        if self.placement is None:
+            self._hits.clear()
+            return self
 
-        self: 'Ship' = info.data
-        if placement.size != self.spec.size:
+        # Confirm ship size is correct
+        if self.placement.size != self.spec.size:
             raise ValueError(
                 f"Ship '{self.type}' expects {self.spec.size} tiles,"
                 f"but got {self.placement.size}."
             )
 
-        return placement
+        if self.symbol is None and self.spec.symbol is not None:
+            self.symbol = self.spec.symbol
+
+        if len(self._hits) != self.spec.size:
+            self._hits = [False] * self.spec.size
+
+        return self
 
     def load_placement(
             self, raw_node_or_coord_like: Any, index: Optional[int] = None
@@ -162,26 +197,64 @@ class Ship(BaseModel):
         return self
 
     @property
+    def type(self) -> str:
+        return self.spec.type_name
+
+    @property
     def remaining_tiles(self) -> int:
-        """Tiles not yet hit within this ship's placement."""
-        # TODO: Swap in proper hit-tracking logic.
+        """Tiles not yet hit on this ship."""
         if self.placement is None:
-            self._is_alive = False
             return 0
 
-        return self.spec.size
+        return self.spec.size - sum(self._hits)
 
     @property
     def is_alive(self) -> bool:
         """Whether this ship is currently alive."""
-        return self._is_alive
+        return self.remaining_tiles > 0
 
-    def mark_destroyed(self) -> None:
-        """Forcefully mark this ship as destroyed."""
-        self._is_alive = False
+    @property
+    def is_sunk(self) -> bool:
+        """Whether this ship is currently sunk on the board."""
+        return self.placement is not None and self.remaining_tiles == 0
+
+    def register_shot(self, coord_like: Any) -> tuple[bool, bool]:
+        """Record a shot against this ship.
+
+        Always returns (False, False) if no placement is set.
+
+        Returns: hit?, sunk?
+        """
+        if self.placement is None or not self.is_alive:
+            return False, False
+
+        try:
+            c = Coordinate.coerce(coord_like)
+        except Exception:
+            c = self._coerce_coord_inline(coord_like)
+
+        try:
+            idx = self.placement.positions.index(c)
+        except ValueError:
+            return False, self.is_sunk
+
+        if not self._hits[idx]:
+            self._hits[idx] = True
+            sunk_now = self.remaining_tiles == 0
+            return True, sunk_now
+
+        return False, self.is_sunk
+
+    def _coerce_coord_inline(self, v: Any) -> Coordinate:
+        from src.battleships.domain.coordinate import Coordinate
+        return Coordinate.coerce(v)
+
+    def reset_hits(self) -> None:
+        self._hits = [False] * (self.spec.size if self.placement else 0)
 
     def __str__(self) -> str:
-        return f"<{self.__class__.__name__}.{self.type!r}: {self.symbol}>"
+        return (f"<{self.__class__.__name__} '{self.type!r}_{self.index!r}> "
+                f"(alive={self.is_alive}, remaining={self.remaining_tiles})")
 
     def __repr__(self):
         return (

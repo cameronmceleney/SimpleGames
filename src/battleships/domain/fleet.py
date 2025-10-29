@@ -45,9 +45,10 @@ from typing import Any, Mapping, Optional
 # Third-party imports
 from pydantic import (
     BaseModel,
+    computed_field,
     ConfigDict,
     Field,
-    model_validator,)
+    model_validator, PrivateAttr, )
 from yaml import YAMLError
 
 # Local application imports
@@ -83,6 +84,8 @@ class Roster(BaseModel):
     id: str
     ships: dict[str, ShipSpec] = Field(default_factory=dict)
 
+    _raw_counts: Optional[Mapping[str, int]] = PrivateAttr(default=None)
+
     @classmethod
     def load_from_yaml(cls, id_: str, *, filepath: str = "config/rosters.yml") -> 'Roster':
         """Load a roster from the YAML configuration file.
@@ -111,9 +114,17 @@ class Roster(BaseModel):
                 raise YAMLError(f"Roster ID '{id_!r}' entry '{name!r}' must be"
                                 f"a mapping of valid 'ShipSpec' fields.")
             else:
-                ships[name] = ShipSpec(**ship_spec_node)
+                ships[name] = ShipSpec(type_name=name, **ship_spec_node)
 
         return cls(id=id_, ships=ships)
+
+    @computed_field
+    @property
+    def counts(self) -> dict[str, int]:
+        if self._raw_counts is None:
+            return {}
+
+        return {t: int(self._raw_counts.get(t, 0)) for t in self.ships.keys()}
 
     def __str__(self):
         return f"{self.__class__.__name__}(id={self.id}, ships={self.ships})"
@@ -266,7 +277,7 @@ class Fleet(BaseModel):
         for ship_type, ship_spec in roster.ships.items():
             for i in range(counts.get(ship_type, 0)):
                 key = f"{ship_type}_{i}"
-                ships[key] = Ship(spec=ship_spec, type=ship_type, index=i)
+                ships[key] = Ship(spec=ship_spec, index=i)
 
         return cls.model_validate({'id': fleet_id, 'roster': roster,
                                    'ships': ships, 'counts': counts},
