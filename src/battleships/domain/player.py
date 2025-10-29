@@ -44,6 +44,7 @@ from enum import StrEnum
 from pydantic import BaseModel, ConfigDict, Field
 from typing import Any, Optional
 
+from battleships.domain.shot_info import ShotOutcome
 # Third-party imports
 
 # Local application imports
@@ -51,6 +52,7 @@ from src.battleships.domain.fleet import Fleet
 from src.battleships.domain.board import BattleshipBoard, Symbols
 from src.utils.utils import Divider, load_yaml
 from src.battleships.domain.coordinate import Coordinate
+from src.battleships.domain.shot_info import ShotEngine
 
 
 # Module-level constants
@@ -66,44 +68,6 @@ MESSAGES: dict = {
     'make_guess': "Enter the co-ordinates of your next shot: "
 }
 """Messages to display to the player."""
-
-
-class ShotOutcome(StrEnum):
-    """Possible outcomes of a shot at a valid Coordinate.
-
-    Attributes:
-        HIT: Successful shot.
-        MISS: Unsuccessful shot.
-        REPEAT: Take another shot.
-        OUT: Out-of-bounds.
-        INVALID: Coordinates were invalid.
-        ERROR: Error encountered.
-    """
-
-    # Members: name becomes a human label (str), e.g. "Hit"
-    HIT = "Hit! You struck an enemy ship."
-    MISS = "Miss. Nothing struck."
-    REPEAT = "You've already targeted that cell."
-    OUT = "Shot is out of bounds."
-    INVALID = "Coordinate input was invalid."
-    ERROR = "Error encountered."
-
-    def __new__(cls, message: str):
-        obj = str.__new__(cls, message)
-        obj._value_ = str(message)
-
-        return obj
-
-    def __str__(self) -> str:
-        return self.name.capitalize().replace("_", " ")
-
-    @property
-    def message(self) -> str:
-        """Verbose description of the outcome.
-
-        Alias for the value of the Enum member.
-        """
-        return self._value_
 
 
 class Player(BaseModel):
@@ -149,6 +113,7 @@ class Player(BaseModel):
         Arguments:
             filepath: Relative path to file containing ship placements.
         """
+        # TODO. Add error check for filepath
         player_data = load_yaml(filepath if filepath else {})
         log.debug(player_data)
 
@@ -158,30 +123,13 @@ class Player(BaseModel):
     def place_fleet(self, *, symbol_strategy: str = 'initial') -> None:
         """Place this player's fleet onto their board."""
         for ship in self.fleet.ships.values():
-            if symbol_strategy == 'initial':
-                symbol = ship.symbol if ship.symbol is not None else ship.type[0].upper()
-            else:
-                symbol = 'S'
+            if ship.placement is None:
+                continue
 
-            self.board.place(ship.placement, symbol=symbol)
+            self.board.place(ship.placement, symbol=ship.symbol)
 
     @staticmethod
-    def coerce_shot(raw: Any) -> tuple[Optional[Coordinate], Optional[str]]:
-        """Convert user's input into a Coordinate.
-
-        Method doesn't support I/O.
-
-        Arguments:
-            raw: Raw user into a Coordinate.
-        """
-        try:
-            coord = Coordinate.coerce(raw)
-            return coord, None
-        except Exception as e:
-            return None, f"{type(e).__name__}: {e}"
-
-    @staticmethod
-    def apply_shot(target: BattleshipBoard, shot: Coordinate) -> ShotOutcome:
+    def apply_shot(target_player: 'Player', shot: Coordinate) -> 'ShotOutcome':
         """Core logic for a player taking a shot.
 
         Method doesn't support I/O. For the rules applied to each `shot` see
@@ -191,22 +139,31 @@ class Player(BaseModel):
             target: Another player's (game-specific) board being aimed at.
             shot: Grid-tile attempting to be shot.
         """
-        if not target.in_bounds(shot):
+        board = target_player.board
+        if not board.in_bounds(shot):
             return ShotOutcome.OUT
 
-        cell = target.get(shot)
-        if cell == Symbols.HIT or cell == Symbols.MISS:
+        cell = board.get(shot)
+        if cell in (Symbols.HIT, Symbols.MISS):
             return ShotOutcome.REPEAT
 
-        if cell == Symbols.EMPTY:
-            target.mark_miss(shot)
-            return ShotOutcome.MISS
+        # Check opponent's fleet for hit tracking
+        outcome, ship = target_player.fleet.register_shot(shot)
+        if outcome is ShotOutcome.MISS:
+            board.mark_miss(shot)
+        elif outcome is ShotOutcome.HIT:
+            board.mark_hit(shot)
+            # TODO. Add ability to mark sunk ships differently.
+        else:
+            # Guarding against a missed ShotOutcome.REPEAT
+            pass
 
-        # Any non-empty, non-(HIT/MISS) cell is considered to be a ship.
-        target.mark_hit(shot)
-        return ShotOutcome.HIT
+        return outcome
 
-    def take_turn(self, opponent: 'Player') -> ShotOutcome:
+    def record_shot(self, shot: Coordinate) -> None:
+        self.shots.append(shot)
+
+    def take_turn(self, opponent: 'Player') -> 'ShotOutcome':
         """Orchestrator for a single turn.
 
         Method supports I/O.
@@ -221,22 +178,14 @@ class Player(BaseModel):
             opponent: Another player to target.
         """
         raw = input(f"<Player {self.name}> {MESSAGES['make_guess']}")
-        coord, err = self.coerce_shot(raw)
-        if coord is None:
-            print(f"<Player {self.id}> Invalid input: {err}")
-            return ShotOutcome.INVALID
 
-        outcome = self.apply_shot(opponent.board, coord)
+        info = ShotEngine.process(opponent.board, opponent.fleet, raw)
+        if info.outcome not in (ShotOutcome.INVALID, ShotOutcome.ERROR, ShotOutcome.OUT):
+            self.record_shot(info.coord)
 
-        if outcome not in (ShotOutcome.INVALID, ShotOutcome.ERROR):
-            self.record_shot(coord)
+        print(f"<Player {self.id}> {info.outcome.message}")
 
-        print(f"<Player {self.id}> {outcome.message}")
-
-        return outcome
-
-    def record_shot(self, shot: Coordinate) -> None:
-        self.shots.append(shot)
+        return info.outcome
 
     @staticmethod
     def end_turn() -> None:

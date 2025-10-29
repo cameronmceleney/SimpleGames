@@ -62,12 +62,13 @@ __all__ = ['Battleships']
 
 
 class Battleships:
-    """Battleships class.
+    """High-level game coordinator for Battleships.
 
     Allows one to play a game of battleships!
 
     Attributes:
-        players:            All players in the game.
+        players:
+        board: Shared template but each Player owns their own instance.
     """
     players: list[Player]
     board: BattleshipBoard
@@ -85,42 +86,47 @@ class Battleships:
         self.players = []
         self.remaining_players: int = 0
         self._current_player_idx: int = 0
-        self._current_player: Optional[Player] = None
 
+        # Hold a template to display at the start of the game
         self.board = BattleshipBoard(*board_size)
 
-        if players_names is not None:
-            self.add_players(*players_names)
+        if players_names:
+            self.add_players(*players_names, board_size=board_size)
 
-        self._post_init(autoplay=autoplay)
-
-    def _post_init(self, **kwargs):
-        if 'autoplay' in kwargs.keys() and kwargs['autoplay']:
-            print("Working autoplay.")
+        if autoplay:
             self.board.show()
-            exit(0)
+            return
 
-    def add_players(self, *names: str) -> None:
+    def add_players(self, *names: str, board_size: tuple[int, int]) -> None:
         """Add a player to the game."""
         for n in names:
-            self.players.append(self._create_player(n))
+            p = self._create_player(n, board_size)
+            self.players.append(p)
 
-            if len(self.players) == 1:
-                self._current_player = self.players[0]
+        self.remaining_players = len(self.players)
 
-    def _create_player(self, name: str) -> Player:
+    def _create_player(self, name: str, board_size: tuple[int, int]) -> Player:
         """"""
         name_ = name.capitalize()
-        id_ = len(self.players)
-        player = Player(name=name_, id=id_)
+        player_id = len(self.players)
+
+        player = Player(
+            name=name_,
+            id=player_id,
+            board=BattleshipBoard(*board_size),
+        )
         log.debug(player)
 
-        player.apply_positions('config/player.yml')
-
-        # Update class attributes
-        self.remaining_players += 1
+        try:
+            player.apply_positions('config/player.yml')
+        except Exception as e:
+            raise e
 
         return player
+
+    def _alive_opponents(self, idx: int) -> list[int]:
+        return [i for i, p in enumerate(self.players)
+                if i != idx and p.is_playing]
 
     def play(self) -> None:
         """Play a game of battleships.
@@ -128,20 +134,37 @@ class Battleships:
         Turn-based game of battleships. Each player gets to take one shot (make
         a guess) at the enemy's position.
         """
-        while self.remaining_players > 1:
-            self._current_player.take_turn(self.players[1])
+        if len(self.players) < 2:
+            # TODO. Add ability to play against random choice
+            print('Need at least two players.')
+            return
+
+        while True:
+            current_player = self.players[self._current_player_idx]
+
+            if not current_player.is_playing:
+                self._current_player_idx = (self._current_player_idx + 1) % len(self.players)
+                continue
+
+            opp_indices = self._alive_opponents(self._current_player_idx)
+            if not opp_indices:
+                # No more opponents means this player won
+                print(f'Winner: {current_player.name}')
+                break
+
+            opponent = self.players[opp_indices[0]]
+            outcome = current_player.take_turn(opponent=opponent)
             Player.end_turn()
 
-    def _allow_guess(self, idx: int):
-        """"""
-        msg = f"<Player {idx}> {PLAYER_MESSAGES['make_guess']} "
-        player_input = input(msg)
-        print(player_input)
+            if not opponent.is_playing:
+                print(f"{opponent.name} has been eliminated!")
+
+            self._current_player_idx = (self._current_player_idx + 1) % len(self.players)
 
 
 def _test_battleships() -> None:
     bs = Battleships(board_size=(4, 4), autoplay=False)
-    bs.add_players("cameron", "karolina")
+    bs.add_players("cameron", "karolina", board_size=(10, 10))
     # print(f"Players\n{bs.players}")
     bs.play()
 

@@ -225,25 +225,20 @@ class Ship(BaseModel):
 
         Returns: hit?, sunk?
         """
-        if self.placement is None or not self.is_alive:
+        if self.placement is None or self.spec.size == 0 or self.is_sunk:
             return False, False
 
-        try:
-            c = Coordinate.coerce(coord_like)
-        except Exception:
-            c = self._coerce_coord_inline(coord_like)
-
+        c = Position.coerce(coord_like).positions[0]
         try:
             idx = self.placement.positions.index(c)
         except ValueError:
             return False, self.is_sunk
 
-        if not self._hits[idx]:
-            self._hits[idx] = True
-            sunk_now = self.remaining_tiles == 0
-            return True, sunk_now
+        if self._hits and self._hits[idx]:
+            return False, self.is_sunk
 
-        return False, self.is_sunk
+        self._hits[idx] = True
+        return True, self.is_sunk
 
     def _coerce_coord_inline(self, v: Any) -> Coordinate:
         from src.battleships.domain.coordinate import Coordinate
