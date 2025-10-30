@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-"""(One liner introducing this file battleships.py)
+"""(One liner introducing this file game.py)
 
 (
 Leading paragraphs explaining file in more detail.
@@ -15,9 +15,7 @@ Trailing paragraphs summarising final details.
 )
 
 Todo:
-    * (Optional section for module-wide tasks).
-    * (Use format: 'YYMMDD/task_identifier - one-liner task description'
-    
+
 References:
     Style guide: `Google Python Style Guide`_
 
@@ -27,7 +25,7 @@ Notes:
     Project
         SimpleGames
     Path
-        src/battleships/battleships.py
+        src/battleships/game.py
     Author
         Cameron Aidan McEleney < c.mceleney.1@research.gla.ac.uk >
     Created
@@ -47,21 +45,14 @@ from typing import Optional
 # Third-party imports
 
 # Local application imports
-from src.battleships.domain.board import BattleshipBoard
-from src.battleships.domain.player import (
-    Player,
-    MESSAGES as PLAYER_MESSAGES)
+from battleships.board import Board
+from .player import Player, DEFAULT_PLAYER
 
 from src.log import get_logger
-
 log = get_logger(__name__)
 
-# Module-level constants
 
-__all__ = ['Battleships']
-
-
-class Battleships:
+class Game:
     """High-level game coordinator for Battleships.
 
     Allows one to play a game of battleships!
@@ -71,9 +62,7 @@ class Battleships:
         board: Shared template but each Player owns their own instance.
     """
     players: list[Player]
-    board: BattleshipBoard
-
-    _rosters_yaml = "config/rosters.yml"
+    board: Board
 
     def __init__(
             self,
@@ -88,7 +77,7 @@ class Battleships:
         self._current_player_idx: int = 0
 
         # Hold a template to display at the start of the game
-        self.board = BattleshipBoard(*board_size)
+        self.board = Board(*board_size)
 
         if players_names:
             self.add_players(*players_names, board_size=board_size)
@@ -105,7 +94,12 @@ class Battleships:
 
         self.remaining_players = len(self.players)
 
-    def _create_player(self, name: str, board_size: tuple[int, int]) -> Player:
+    def _create_player(
+            self,
+            name: str,
+            board_size: tuple[int, int],
+            config_file: str | None = None,
+    ) -> Player:
         """"""
         name_ = name.capitalize()
         player_id = len(self.players)
@@ -113,12 +107,13 @@ class Battleships:
         player = Player(
             name=name_,
             id=player_id,
-            board=BattleshipBoard(*board_size),
+            board=Board(*board_size),
+
         )
         log.debug(player)
 
         try:
-            player.apply_positions('config/player.yml')
+            player.apply_positions(config_file or DEFAULT_PLAYER)
         except Exception as e:
             raise e
 
@@ -162,12 +157,12 @@ class Battleships:
             self._current_player_idx = (self._current_player_idx + 1) % len(self.players)
 
 
-def _test_battleships() -> None:
-    bs = Battleships(board_size=(4, 4), autoplay=False)
+def test_battleships() -> None:
+    bs = Game(board_size=(4, 4), autoplay=False)
     bs.add_players("cameron", "karolina", board_size=(10, 10))
     # print(f"Players\n{bs.players}")
     bs.play()
 
 
 if __name__ == '__main__':
-    _test_battleships()
+    test_battleships()

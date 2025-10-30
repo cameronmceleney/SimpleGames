@@ -40,34 +40,32 @@ Notes:
 from __future__ import annotations
 
 # Standard library imports
-from enum import StrEnum
-from pydantic import BaseModel, ConfigDict, Field
-from typing import Any, Optional
+from typing import Optional, TYPE_CHECKING
 
-from battleships.domain.shot_info import ShotOutcome
 # Third-party imports
+from pydantic import BaseModel, ConfigDict, Field
 
 # Local application imports
-from src.battleships.domain.fleet import Fleet
-from src.battleships.domain.board import BattleshipBoard, Symbols
-from src.utils.utils import Divider, load_yaml
-from src.battleships.domain.coordinate import Coordinate
-from src.battleships.domain.shot_info import ShotEngine
+from board_games import Coordinate
+from battleships.board import Board, Symbols
+from battleships.ships import Fleet
+from battleships.shots import Engine as ShotsEngine
 
+from .messages import PlayerMessages
 
-# Module-level constants
-PLAYER_FILE_PATH = "config/player.yml"
-
+from utils import Divider, load_yaml
 from src.log import get_logger
+
+if TYPE_CHECKING:
+    from battleships.shots import Outcome as ShotsOutcome
 
 log = get_logger(__name__)
 
-__all__ = ['Player', 'MESSAGES']
+# Module-level constants
+DEFAULT_PLAYER: str = 'battleships/config/player.yml'
+"""Default relative path to a player's configuration file."""
 
-MESSAGES: dict = {
-    'make_guess': "Enter the co-ordinates of your next shot: "
-}
-"""Messages to display to the player."""
+__all__ = ['DEFAULT_PLAYER', 'Player']
 
 
 class Player(BaseModel):
@@ -84,10 +82,9 @@ class Player(BaseModel):
 
     name: str
     id: int
-
     # Defaults initialised via static helpers to simplify class' init.
     fleet: Fleet = Field(default_factory=lambda: Player.default_fleet())
-    board: BattleshipBoard = Field(default_factory=lambda: Player.default_board())
+    board: Board = Field(default_factory=lambda: Player.default_board())
 
     shots: list[Coordinate] = Field(
         default_factory=list,
@@ -95,12 +92,12 @@ class Player(BaseModel):
     )
 
     @staticmethod
-    def default_fleet(fleet_id: str = 'basic_fleet_1') -> Fleet:
+    def default_fleet(fleet_id: str = 'basic_fleet_1') -> 'Fleet':
         return Fleet.load_from_yaml(fleet_id=fleet_id)
 
     @staticmethod
-    def default_board(height: int = 10, width: int = 10) -> BattleshipBoard:
-        return BattleshipBoard(height=height, width=width)
+    def default_board(height: int = 10, width: int = 10) -> 'Board':
+        return Board(height=height, width=width)
 
     @property
     def is_playing(self) -> bool:
@@ -126,36 +123,36 @@ class Player(BaseModel):
             if ship.placement is None:
                 continue
 
-            self.board.place(ship.placement, symbol=ship.symbol)
+            self.board.place(ship.placement, symbol=(ship.symbol or ship.spec.symbol))
 
     @staticmethod
-    def apply_shot(target_player: 'Player', shot: Coordinate) -> 'ShotOutcome':
+    def apply_shot(target_player: 'Player', shot: Coordinate) -> 'ShotsOutcome':
         """Core logic for a player taking a shot.
 
         Method doesn't support I/O. For the rules applied to each `shot` see
-        the attribute descriptions of ``ShotOutcome``.
+        the attribute descriptions of ``ShotsOutcome``.
 
         Arguments:
-            target: Another player's (game-specific) board being aimed at.
+            target_player: Another player's (game-specific) board being aimed at.
             shot: Grid-tile attempting to be shot.
         """
         board = target_player.board
         if not board.in_bounds(shot):
-            return ShotOutcome.OUT
+            return ShotsOutcome.OUT
 
         cell = board.get(shot)
         if cell in (Symbols.HIT, Symbols.MISS):
-            return ShotOutcome.REPEAT
+            return ShotsOutcome.REPEAT
 
         # Check opponent's fleet for hit tracking
         outcome, ship = target_player.fleet.register_shot(shot)
-        if outcome is ShotOutcome.MISS:
+        if outcome is ShotsOutcome.MISS:
             board.mark_miss(shot)
-        elif outcome is ShotOutcome.HIT:
+        elif outcome is ShotsOutcome.HIT:
             board.mark_hit(shot)
             # TODO. Add ability to mark sunk ships differently.
         else:
-            # Guarding against a missed ShotOutcome.REPEAT
+            # Guarding against a missed ShotsOutcome.REPEAT
             pass
 
         return outcome
@@ -163,7 +160,7 @@ class Player(BaseModel):
     def record_shot(self, shot: Coordinate) -> None:
         self.shots.append(shot)
 
-    def take_turn(self, opponent: 'Player') -> 'ShotOutcome':
+    def take_turn(self, opponent: 'Player') -> 'ShotsOutcome':
         """Orchestrator for a single turn.
 
         Method supports I/O.
@@ -177,10 +174,10 @@ class Player(BaseModel):
         Arguments:
             opponent: Another player to target.
         """
-        raw = input(f"<Player {self.name}> {MESSAGES['make_guess']}")
+        raw = input(f"<Player {self.name}> {PlayerMessages.make_guess}")
 
-        info = ShotEngine.process(opponent.board, opponent.fleet, raw)
-        if info.outcome not in (ShotOutcome.INVALID, ShotOutcome.ERROR, ShotOutcome.OUT):
+        info = ShotsEngine.process(opponent.board, opponent.fleet, raw)
+        if info.outcome not in (ShotsOutcome.INVALID, ShotsOutcome.ERROR, ShotsOutcome.OUT):
             self.record_shot(info.coord)
 
         print(f"<Player {self.id}> {info.outcome.message}")

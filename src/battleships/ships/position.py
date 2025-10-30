@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-"""(One liner introducing this file placement.py)
+"""(One liner introducing this file position.py)
 
 (
 Leading paragraphs explaining file in more detail.
@@ -52,9 +52,7 @@ Notes:
 from __future__ import annotations
 
 # Standard library imports
-from ast import literal_eval
 from collections.abc import Mapping
-from socket import send_fds
 from typing import Annotated, Any, Iterator, Sequence, TypeAlias
 
 # Third-party imports
@@ -67,7 +65,7 @@ from pydantic import (AliasChoices,
                       field_validator)
 
 # Local application imports
-from src.battleships.domain.coordinate import Coordinate
+from board_games.coordinate import Coordinate
 from src.utils.utils import JustifyText
 
 __all__ = [
@@ -80,7 +78,10 @@ __all__ = [
 
 # Module-level constants
 position_type: TypeAlias = tuple[Coordinate, ...]
+"""Data-type of ``Position.positions``."""
+
 POSITION_ALIASES: tuple[str, ...] = ('positions', 'position')
+"""Valid aliases for loading a position."""
 
 
 class Position(BaseModel):
@@ -96,7 +97,7 @@ class Position(BaseModel):
     """
     model_config = ConfigDict(frozen=True, validate_default=True)
 
-    positions: tuple[Coordinate, ...] = Field(
+    positions: position_type = Field(
         ...,
         validation_alias=AliasChoices(*POSITION_ALIASES),
         description="Ordered coordinates for this ship."
@@ -254,3 +255,4 @@ class Position(BaseModel):
 PositionField: TypeAlias = Annotated[
     Position,
     BeforeValidator(Position.coerce)]
+"""Use this alias of `Position` when initialising a `Field` in Pydantic."""

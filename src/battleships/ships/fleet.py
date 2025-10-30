@@ -45,96 +45,27 @@ from typing import Any, Mapping, Optional
 # Third-party imports
 from pydantic import (
     BaseModel,
-    computed_field,
     ConfigDict,
     Field,
-    model_validator, PrivateAttr, )
+    model_validator, )
+
 from yaml import YAMLError
 
 # Local application imports
-from src.battleships.domain.ship import ShipSpec, Ship
-from src.utils.utils import load_yaml, JustifyText, Divider
+from battleships.shots.outcome import Outcome
+from .roster import Roster, ROSTER_DEFAULT
+from .ship import Ship
+from utils import Divider, JustifyText, load_yaml
+
 from src.log import get_logger
 
 log = get_logger(__name__)
 
-__all__ = ['Fleet']
+__all__ = ['FLEET_DEFAULT', 'Fleet']
 
 
 # Module-level constants
-
-
-class Roster(BaseModel):
-    """Named set of ship specs loaded from a configuration file.
-
-    Used to build a `Fleet`.
-
-    Expected shape of the configuration file:
-        <id>:
-            <roster>:
-                <ship_type>: { size: <int>, is_cloaded: <bool, optional> }
-
-    Attributes:
-        id:           Unique ID given to this roster in *rosters.yml*.
-
-        ships:              All uninitialised `ShipSpecs`.
-    """
-    model_config = ConfigDict(frozen=True, validate_default=True)
-
-    id: str
-    ships: dict[str, ShipSpec] = Field(default_factory=dict)
-
-    _raw_counts: Optional[Mapping[str, int]] = PrivateAttr(default=None)
-
-    @classmethod
-    def load_from_yaml(cls, id_: str, *, filepath: str = "config/rosters.yml") -> 'Roster':
-        """Load a roster from the YAML configuration file.
-
-        The shape of each entry in the roster file should be:
-            <id>:
-                roster:
-                    <name>: ship spec entries...
-
-        TODO:
-            - Update this method to generate a `ShipSpec` as it doesn't set `ShipSpec.type`.
-        """
-        data = load_yaml(filepath)
-        node = data.get(id_)
-
-        if node is None:
-            raise KeyError(f"Roster ID '{id_!r}' wasn't found at '{filepath!r}'")
-
-        if 'roster' not in node or not isinstance(node['roster'], Mapping):
-            raise YAMLError(f"Roster id '{id_!r}' must contain a mapping"
-                            f"under the 'roster' key.")
-
-        ships: dict[str, ShipSpec] = {}
-        for name, ship_spec_node in node['roster'].items():
-            if not isinstance(ship_spec_node, Mapping):
-                raise YAMLError(f"Roster ID '{id_!r}' entry '{name!r}' must be"
-                                f"a mapping of valid 'ShipSpec' fields.")
-            else:
-                ships[name] = ShipSpec(type_name=name, **ship_spec_node)
-
-        return cls(id=id_, ships=ships)
-
-    @computed_field
-    @property
-    def counts(self) -> dict[str, int]:
-        if self._raw_counts is None:
-            return {}
-
-        return {t: int(self._raw_counts.get(t, 0)) for t in self.ships.keys()}
-
-    def __str__(self):
-        return f"{self.__class__.__name__}(id={self.id}, ships={self.ships})"
-
-    def __repr__(self) -> str:
-        msg = Divider.section.make_title('Roster', self.id, wrap=True)
-        for type_, spec_ in self.ships.items():
-            msg += JustifyText.kv(f"'{type_}'", spec_, value_repr=True)
-
-        return msg + Divider.console
+FLEET_DEFAULT: str = 'battleships/config/fleet.yml'
 
 
 class Fleet(BaseModel):
@@ -228,8 +159,8 @@ class Fleet(BaseModel):
             cls,
             *,
             fleet_id: str,
-            roster_filepath: str = 'config/rosters.yml',
-            fleet_filepath: str = "config/fleet.yml",
+            roster_filepath: str = ROSTER_DEFAULT,
+            fleet_filepath: str = FLEET_DEFAULT,
             settings: Optional[Any] = None
     ) -> 'Fleet':
         """Load a fleet from the YAML configuration file.

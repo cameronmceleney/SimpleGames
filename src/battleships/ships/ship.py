@@ -46,72 +46,24 @@ from __future__ import annotations
 # Standard library imports
 from typing import Any, Mapping, Optional
 
-import yaml
 # Third-party imports
 from pydantic import (BaseModel,
                       ConfigDict,
-                      Field,
                       field_validator,
                       model_validator,
                       PrivateAttr)
 from pydantic_core.core_schema import ValidationInfo
 
 # Local application imports
-from src.battleships.domain.position import Position, PositionField
-from src.utils.utils import CleanText, JustifyText, Divider
+from board_games.coordinate import Coordinate
+from .spec import ShipSpec
+from .position import Position, PositionField
+
+from utils import Divider
 
 # Module-level constants
 
-__all__ = ['ShipSpec', 'Ship']
-
-
-class ShipSpec(BaseModel):
-    """Base property used to define all ships.
-
-    Attributes:
-        size: Number of tiles/squares spanned by the ship.
-        is_cloaked: If ``True``, **ship is not displayed with markers**,
-                    after being hit, for the opposing player/players.
-        default_symbol: Single character used to represent the ship.
-        type: Category of ship (e.g. cruiser) which also dictates what concrete
-              instances of this ShipSpec instance are called during the game.
-    """
-    model_config = ConfigDict(frozen=True, validate_default=True)
-
-    size: int = Field(..., gt=0)
-    is_cloaked: bool = False
-    symbol: Optional[str] = Field(None, min_length=1, max_length=1)
-
-    type_name: str = Field(..., min_length=1)
-
-    @field_validator('symbol', mode='before')
-    @classmethod
-    def _validate_symbol(cls, v: Optional[str], info: ValidationInfo) -> str | None:
-        if v is None:
-            t = info.data.get('type_name')
-            if isinstance(t, str) and t:
-                return t[0].upper()
-            return None
-
-        # Coerce to string and enforce 1 char
-        v = str(v)
-
-        if len(v) != 1:
-            raise ValueError(f"Symbol must be a single character "
-                             f"but got {v!r}")
-
-        return v
-
-    def __str__(self) -> str:
-        return f"<{self.__class__.__name__} '{self.type_name}'> (size={self.size})"
-
-    def __repr__(self):
-        return (
-            JustifyText.kv('Type', f"{self.type_name}")
-            + JustifyText.kv('Size', f"{self.size} tiles")
-            + JustifyText.kv('Cloaked?', CleanText.truthy(self.is_cloaked))
-            + JustifyText.kv('Symbol', self.symbol or '-')
-        )
+__all__ = ['Ship']
 
 
 class Ship(BaseModel):
@@ -125,11 +77,6 @@ class Ship(BaseModel):
         index: Ordinal of this Ship within its type. This lets `Fleet`
                uniquely identify ships that share a common `ShipSpec`.
         placement: Positions on the board occupied by this ship.
-
-        _is_alive:          Tracks whether the ship has been destroyed.
-
-        _is_placed:         Has this ship been placed (i.e. *loaded*) onto the game's board.
-
     """
     model_config = ConfigDict(frozen=False, validate_default=True)
 
@@ -168,7 +115,7 @@ class Ship(BaseModel):
                 f"but got {self.placement.size}."
             )
 
-        if self.symbol is None and self.spec.symbol is not None:
+        if self.symbol is None:
             self.symbol = self.spec.symbol
 
         if len(self._hits) != self.spec.size:
@@ -240,8 +187,14 @@ class Ship(BaseModel):
         self._hits[idx] = True
         return True, self.is_sunk
 
-    def _coerce_coord_inline(self, v: Any) -> Coordinate:
-        from src.battleships.domain.coordinate import Coordinate
+    @staticmethod
+    def _coerce_coord_inline(v: Any) -> Coordinate:
+        """Helper if Coordinate import leads to circular import.
+
+        TODO:
+            - Find a way to not need this method in `Ship`!
+        """
+        from board_games.coordinate import Coordinate
         return Coordinate.coerce(v)
 
     def reset_hits(self) -> None:

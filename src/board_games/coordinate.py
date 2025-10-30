@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-"""(One liner introducing this file coordinates.py)
+"""(One liner introducing this file coordinate.py)
 
 (
 Leading paragraphs explaining file in more detail.
@@ -62,6 +62,7 @@ __all__ = [
 
 # Module-level constants
 coordinate_type: TypeAlias = tuple[int, int]
+"""Type for the ``Coordinate`` class which holds two int-attributes."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -209,3 +210,4 @@ class Coordinate:
 CoordinateField: TypeAlias = Annotated[
     Coordinate,
     BeforeValidator(Coordinate.coerce)]
+"""Use this alias of `Coordinate` when initialising a `Field` in Pydantic."""

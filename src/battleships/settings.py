@@ -15,8 +15,6 @@ Trailing paragraphs summarising final details.
 )
 
 Todo:
-    * (Optional section for module-wide tasks).
-    * (Use format: 'YYMMDD/task_identifier - one-liner task description'
     
 References:
     Style guide: `Google Python Style Guide`_

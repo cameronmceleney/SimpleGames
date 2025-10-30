@@ -48,13 +48,12 @@ from pydantic.dataclasses import dataclass
 from pydantic import Field, field_validator, model_validator
 
 # Local application imports
-from src.battleships.domain.coordinates import Coord
-from src.battleships.domain.shot_info import Shots, ShotInfo
+from battleships.shots.shot_info import Shots, ShotInfo
 
 # Module-level constants
 """A module-level constant with in-line docstring."""
 
-__all__ = ['Guesses', 'Positions']
+__all__ = ['Guesses']
 
 
 @dataclass
@@ -78,7 +77,7 @@ class Guesses:
 
         Accepts:
             - iterable of ``ShotInfo``.
-            - iterable of raw coordinates (``Coord`` and ``str``/``list``/``tuple``)
+            - iterable of raw coordinates (``Coordinate`` and ``str``/``list``/``tuple``)
         """
         if v is None:
             return []
@@ -143,29 +142,3 @@ class Guesses:
     @property
     def total(self) -> int:
         return len(self.shots)
-
-
-@dataclass
-class Positions:
-    """"""
-    shots: Shots = Field(default_factory=Shots)
-
-    @staticmethod
-    def validate(v: Any):
-        is_valid, coord, err_msg = Coord.convert(v)
-        return is_valid, coord, err_msg
-
-    def add_shot(self, shot: "ShotInfo | Coord | Any"):
-        """Add a shot."""
-        match shot:
-            case ShotInfo():
-                shot_ = shot
-            case Coord():
-                shot_ = ShotInfo(idx=None, coord=shot, has_hit=None)
-            case _:
-                shot_ = ShotInfo.from_shot(shot=shot)
-
-        self.shots.append(shot_)
-
-
-
