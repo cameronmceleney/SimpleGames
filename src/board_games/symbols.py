@@ -64,8 +64,20 @@ __all__ = ['SymbolsProto', 'DefaultSymbols']
 
 
 class SymbolsProto(Protocol):
+    """Core symbols all 2D board games require."""
     EMPTY: str
+    SPACE: str
+    VERTICAL_DIVIDER: str
+    HORIZONTAL_DIVIDER: str
 
 
 class DefaultSymbols:
-    EMPTY: str = ' '
+    """Core symbols all 2D board games require."""
+    EMPTY = ' '
+    SPACE = ' '
+    VERTICAL_DIVIDER = '–'  # This is an em-dash!
+    HORIZONTAL_DIVIDER = '|'
+
+    # Aliases
+    vd = VERTICAL_DIVIDER
+    hd = HORIZONTAL_DIVIDER

@@ -60,17 +60,10 @@ from pydantic.dataclasses import dataclass
 # Local application imports
 from .coordinate import Coordinate
 from .grid import Grid
-from .symbols import DefaultSymbols
-
-# Module-level constants
-
-
-class _BattleshipGrid(Grid):
-    symbols = DefaultSymbols
 
 
 @dataclass(slots=True)
-class Board(_BattleshipGrid):
+class Board(Grid):
     """2D game board with bounds-checked cell access and rendering.
 
     This class contains methods general to all 2D board games.
@@ -86,8 +79,7 @@ class Board(_BattleshipGrid):
     def in_bounds(self, coord_like: Any) -> bool:
         """Check if a coordinate is within the grid."""
         coord = Coordinate.coerce(coord_like)
-        x, y = coord.as_tuple()
-        return (0 <= x < self.height) and (0 <= y < self.width)
+        return (0 <= coord.x < self.height) and (0 <= coord.y < self.width)
 
     def require_in_bounds(self, c: Any) -> None:
         coord = Coordinate.coerce(c)
@@ -125,9 +117,9 @@ class Board(_BattleshipGrid):
         """Render a string view of the current board-state."""
         lines: list[str] = []
         start_char = 65  # chr(65) = 'A'
-
-        # Set column symbols and padding
         pad: str = self.symbols.EMPTY * (4 if show_guides else 2)
+
+        sym = self.symbols  # Alias to shorten code of print statements
 
         match col_symbols:
             case 'let':
@@ -137,7 +129,7 @@ class Board(_BattleshipGrid):
             case _:
                 raise ValueError(f"Invalid col_symbols.")
 
-        col_ids = self.symbols.EMPTY.join(cid_iters)
+        col_ids = sym.EMPTY.join(cid_iters)
 
         # Begin rendering Board
         if show_guides:
@@ -153,14 +145,14 @@ class Board(_BattleshipGrid):
                     case 'num': rid = i
                     case _: raise ValueError(f"Invalid row_symbol)")
 
-                lines.append(f"{rid}{self.symbols.space}"
-                             f"{self.symbols.hd}{self.symbols.EMPTY}"
-                             f"{self.symbols.EMPTY.join(row)}")
+                lines.append(f"{rid}{sym.SPACE}"
+                             f"{sym.HORIZONTAL_DIVIDER}{sym.SPACE}"
+                             f"{sym.EMPTY.join(row)}")
             else:
                 lines.append(self.symbols.EMPTY.join(row))
 
         if show_guides:
-            hline = (self.symbols.vd + self.symbols.EMPTY) * self.width
+            hline = self.width * (sym.VERTICAL_DIVIDER + sym.SPACE)
             lines.insert(1, pad + hline)
 
         return '\n'.join(lines) + '\n'

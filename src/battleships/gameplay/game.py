@@ -158,7 +158,7 @@ class Game:
 
 
 def test_battleships() -> None:
-    bs = Game(board_size=(4, 4), autoplay=False)
+    bs = Game(board_size=(8, 8), autoplay=False)
     bs.add_players("cameron", "karolina", board_size=(10, 10))
     # print(f"Players\n{bs.players}")
     bs.play()

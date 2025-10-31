@@ -13,6 +13,7 @@ from .position import (
 
 
 __all__ = [
+    'Position',
     'Roster',
     'Ship',
     'Fleet'

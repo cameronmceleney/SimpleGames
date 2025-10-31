@@ -57,27 +57,12 @@ from enum import StrEnum
 # Third-party imports
 
 # Local application imports
+from board_games.symbols import DefaultSymbols as _BaseSymbols
 
 # Module-level constants
 
 
-class Symbols(StrEnum):
-    """Symbols to denote ships and actions on the playing board.
-
-    Attributes:
-        EMPTY: Alias ``space``.
-        HIT
-        MISS
-        VERTICAL_DIVIDER: Alias ``vd``.
-        HORIZONTAL_DIVIDER: Alias ``hd``.
-    """
-    EMPTY = ' '
+class Symbols(_BaseSymbols):
+    """Symbols to denote ships and actions on the playing board."""
     HIT = '#'
     MISS = '/'
-    VERTICAL_DIVIDER = '–'
-    HORIZONTAL_DIVIDER = '|'
-
-    # Aliases
-    space = EMPTY
-    vd = VERTICAL_DIVIDER
-    hd = HORIZONTAL_DIVIDER

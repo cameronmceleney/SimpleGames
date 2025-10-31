@@ -85,27 +85,19 @@ class Engine:
             return Info(coord=coord,
                         outcome=Outcome.OUT)
 
-        cell = target_board.get(coord)
-
-        if cell in (Outcome.HIT, Outcome.MISS):
-            return Info(coord=coord,
-                        outcome=Outcome.REPEAT,
-                        repeat=True)
+        if (getattr(target_board, 'is_marked', None)
+                and target_board.is_marked(coord)):
+            return Info(coord=coord, outcome=Outcome.REPEAT, repeat=True)
 
         outcome, ship = target_fleet.register_shot(coord)
-
         if outcome is Outcome.MISS:
             target_board.mark_miss(coord)
-            return Info(coord=coord,
-                        outcome=Outcome.MISS)
+            return Info(coord=coord, outcome=Outcome.MISS)
 
         if outcome is Outcome.HIT:
             target_board.mark_hit(coord)
-            ship_type = getattr(ship, 'type', None)
-            ship_index = getattr(ship, 'index', None)
-            return Info(coord=coord,
-                        outcome=Outcome.HIT,
-                        ship_type=ship_type, ship_index=ship_index)
+            return Info(coord=coord, outcome=Outcome.HIT,
+                        ship_type=getattr(ship, 'type', None),
+                        ship_index=getattr(ship, 'index', None))
 
-        return Info(coord=coord,
-                    outcome=outcome or Outcome.ERROR)
+        return Info(coord=coord, outcome=outcome or Outcome.ERROR)

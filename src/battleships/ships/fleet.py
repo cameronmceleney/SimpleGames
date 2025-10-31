@@ -53,6 +53,7 @@ from yaml import YAMLError
 
 # Local application imports
 from battleships.shots.outcome import Outcome
+from board_games import Coordinate
 from .roster import Roster, ROSTER_DEFAULT
 from .ship import Ship
 from utils import Divider, JustifyText, load_yaml
@@ -153,6 +154,32 @@ class Fleet(BaseModel):
 
     def unplaced_ships(self) -> list[str]:
         return [t for t, s in self.ships.items() if s.placement is None]
+
+    def ship_at(self, coord_like: Any) -> tuple[Optional[Ship], Optional[int]]:
+        """Find and return a ship occupying a tile."""
+        coord = Coordinate.coerce(coord_like)
+        for ship in self.ships.values():
+            if ship.placement is None:
+                continue
+
+            try:
+                idx = ship.placement.positions.index(coord)
+            except ValueError:
+                continue
+            else:
+                return ship, idx
+
+        return None, None
+
+    def register_shot(self, coord_like: Any) -> tuple[Outcome, Optional[Ship]]:
+        """Delegates a shot from an external to the underlying Ship."""
+        ship, _ = self.ship_at(coord_like)
+        if ship is None:
+            return Outcome.MISS, None
+
+        hit, sunk = ship.register_shot(coord_like)
+        return (Outcome.HIT, ship) if hit else (Outcome.MISS, None)
+
 
     @classmethod
     def load_from_yaml(

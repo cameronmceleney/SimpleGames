@@ -68,13 +68,17 @@ class Board(BaseBoard):
 
     This class contains high-level helpers specific to Battleships games.
     """
-    _symbols = Symbols
+    symbols = Symbols
 
     def mark_hit(self, c: Any) -> None:
         self.set(c, self.symbols.HIT)
 
     def mark_miss(self, c: Any) -> None:
         self.set(c, self.symbols.MISS)
+
+    def is_marked(self, c: Any) -> bool:
+        v = self.get(c)
+        return v in (self.symbols.HIT, self.symbols.MISS)
 
     def place(self, pos: Any, symbol: str = 'S') -> None:
         """Place a multi-cell object onto the board.
