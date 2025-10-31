@@ -40,16 +40,14 @@ Notes:
 from __future__ import annotations
 
 # Standard library imports
-from typing import Optional, TypeAlias, TYPE_CHECKING
+from typing import Optional, TypeAlias
 
 # Third-party imports
-from pydantic import ConfigDict, BaseModel
+from pydantic import BaseModel, ConfigDict
 
 # Local application imports
-
-if TYPE_CHECKING:
-    from board_games.coordinate import Coordinate
-    from battleships.shots import Outcome
+from board_games import Coordinate
+from battleships.shots import Outcome
 
 # Module-level constants
 
@@ -68,40 +66,4 @@ class Info(BaseModel):
 
 
 Shots: TypeAlias = list['Info']
-"""A module-level constant with in-line docstring."""
-
-#
-# class ShotInfo(BaseModel):
-#     """Key information about each guess.
-#
-#     Attributes:
-#         idx:               The index of the shot used to track.
-#         coord:              Grid co-ordinate of the shot.
-#         has_hit:            Whether the shot hit an enemy ship.
-#     """
-#     model_config = ConfigDict(validate_assignment=True)
-#
-#     coord: Coord
-#     has_hit: Optional[bool] = None
-#
-#     @field_validator('coord', mode='before')
-#     @classmethod
-#     def _validate_coord(cls, v: Any) -> Coord:
-#         """"""
-#         is_shot_valid, coord, err_msg = Coord.convert(v)
-#
-#         if not is_shot_valid or coord is None:
-#             raise ValueError(f"Invalid Coord string: {v!r}{err_msg}")
-#         return coord
-#
-#     @classmethod
-#     def from_shot(cls, shot: Any) -> "ShotInfo | None":
-#         """Register this ShotInfo."""
-#         is_valid, coord, err_msg = Coord.convert(shot)
-#
-#         if coord is None or not is_valid:
-#             # Failure conditions.
-#             return None
-#
-#         return ShotInfo(coord=coord)
-#
+"""Description missing."""

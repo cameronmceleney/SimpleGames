@@ -41,23 +41,24 @@ from __future__ import annotations
 
 # Standard library imports
 from typing import Optional, TYPE_CHECKING
+from typing_extensions import deprecated
 
 # Third-party imports
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 # Local application imports
 from board_games import Coordinate
 from battleships.board import Board, Symbols
 from battleships.ships import Fleet
-from battleships.shots import Engine as ShotsEngine
+import battleships.shots as shots
+
+if TYPE_CHECKING:
+    from battleships.shots import Outcome
 
 from .messages import PlayerMessages
 
 from utils import Divider, load_yaml
 from src.log import get_logger
-
-if TYPE_CHECKING:
-    from battleships.shots import Outcome as ShotsOutcome
 
 log = get_logger(__name__)
 
@@ -76,7 +77,7 @@ class Player(BaseModel):
         id: Index of this player within manager's list: ``Battleships.players``.
         fleet: All ships and their positions.
         board: 2D grid storing current game-state.
-        shots: All shots (guessed grid-tiles) by this player.
+        guesses: All shots guessed by this player.
     """
     model_config = ConfigDict(validate_default=True)
 
@@ -86,9 +87,9 @@ class Player(BaseModel):
     fleet: Fleet = Field(default_factory=lambda: Player.default_fleet())
     board: Board = Field(default_factory=lambda: Player.default_board())
 
-    shots: list[Coordinate] = Field(
+    guesses: list[Coordinate] = Field(
         default_factory=list,
-        validation_alias='shots'
+        validation_alias=AliasChoices('guesses', 'shots')
     )
 
     @staticmethod
@@ -125,12 +126,14 @@ class Player(BaseModel):
 
             self.board.place(ship.placement, symbol=(ship.symbol or ship.spec.symbol))
 
+    @deprecated("Player should not be directly applying shots! Instead, use "
+                "`shots.Engine.process().")
     @staticmethod
-    def apply_shot(target_player: 'Player', shot: Coordinate) -> 'ShotsOutcome':
+    def apply_shot(target_player: 'Player', shot: 'Coordinate') -> 'Outcome':
         """Core logic for a player taking a shot.
 
         Method doesn't support I/O. For the rules applied to each `shot` see
-        the attribute descriptions of ``ShotsOutcome``.
+        the attribute descriptions of ``shots.Outcome``.
 
         Arguments:
             target_player: Another player's (game-specific) board being aimed at.
@@ -138,17 +141,17 @@ class Player(BaseModel):
         """
         board = target_player.board
         if not board.in_bounds(shot):
-            return ShotsOutcome.OUT
+            return shots.outcome.OUT
 
         cell = board.get(shot)
         if cell in (Symbols.HIT, Symbols.MISS):
-            return ShotsOutcome.REPEAT
+            return shots.Outcome.REPEAT
 
         # Check opponent's fleet for hit tracking
         outcome, ship = target_player.fleet.register_shot(shot)
-        if outcome is ShotsOutcome.MISS:
+        if outcome is shots.Outcome.MISS:
             board.mark_miss(shot)
-        elif outcome is ShotsOutcome.HIT:
+        elif outcome is shots.Outcome.HIT:
             board.mark_hit(shot)
             # TODO. Add ability to mark sunk ships differently.
         else:
@@ -158,9 +161,9 @@ class Player(BaseModel):
         return outcome
 
     def record_shot(self, shot: Coordinate) -> None:
-        self.shots.append(shot)
+        self.guesses.append(shot)
 
-    def take_turn(self, opponent: 'Player') -> 'ShotsOutcome':
+    def take_turn(self, opponent: 'Player') -> 'Outcome':
         """Orchestrator for a single turn.
 
         Method supports I/O.
@@ -176,13 +179,11 @@ class Player(BaseModel):
         """
         raw = input(f"<Player {self.name}> {PlayerMessages.make_guess}")
 
-        info = ShotsEngine.process(opponent.board, opponent.fleet, raw)
-        if info.outcome not in (ShotsOutcome.INVALID, ShotsOutcome.ERROR, ShotsOutcome.OUT):
-            self.record_shot(info.coord)
-
-        print(f"<Player {self.id}> {info.outcome.message}")
-
-        return info.outcome
+        shot_attempt = shots.Engine.process(opponent.board, opponent.fleet, raw)
+        if shot_attempt.outcome not in shots.Outcome.failures():
+            self.record_shot(shot_attempt.coord)
+        print(f"<Player {self.id}> {shot_attempt.outcome.message}")
+        return shot_attempt.outcome
 
     @staticmethod
     def end_turn() -> None:
@@ -204,4 +205,4 @@ class Player(BaseModel):
         return msg
 
     def __str__(self) -> str:
-        return f"<Player {self.id}> {self.name} | shots={len(self._shots)}"
+        return f"<Player {self.id}> {self.name} | guesses={len(self.guesses)}"

@@ -51,7 +51,8 @@ from typing import (
 
 # Local application imports
 if TYPE_CHECKING:
-    from battleships.shots import Outcome as ShotOutcome
+    from battleships.shots import Outcome
+    from battleships.ships import Ship
 
 # Module-level constants
 
@@ -68,5 +69,4 @@ class BoardProto(Protocol):
 
 @runtime_checkable
 class FleetProto(Protocol):
-    def register_shot(self, coord_like: Any) -> tuple[
-        'ShotOutcome', Optional[Any]]: ...
+    def apply_shot(self, coord_like: Any) -> tuple[Outcome, Optional[Ship]]: ...

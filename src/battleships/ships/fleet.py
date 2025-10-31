@@ -155,29 +155,35 @@ class Fleet(BaseModel):
     def unplaced_ships(self) -> list[str]:
         return [t for t, s in self.ships.items() if s.placement is None]
 
-    def ship_at(self, coord_like: Any) -> tuple[Optional[Ship], Optional[int]]:
-        """Find and return a ship occupying a tile."""
+    def ship_at(self, coord_like: Any) -> Optional[Ship]:
+        """Find and return a ship occupying a tile.
+
+        Arguments:
+            coord-like:
+
+        TODO:
+         - Change method to only return `Ship` objects as each `Ship` now
+           holds its ordinal index
+        """
         coord = Coordinate.coerce(coord_like)
         for ship in self.ships.values():
             if ship.placement is None:
                 continue
 
-            try:
-                idx = ship.placement.positions.index(coord)
-            except ValueError:
-                continue
-            else:
-                return ship, idx
+            if coord in ship.placement:
+                return ship
 
-        return None, None
+        return None
 
-    def register_shot(self, coord_like: Any) -> tuple[Outcome, Optional[Ship]]:
-        """Delegates a shot from an external to the underlying Ship."""
-        ship, _ = self.ship_at(coord_like)
+    def apply_shot(self, coord_like: Any) -> tuple[Outcome, Optional[Ship]]:
+        """Resolve which ship is shot (if any) and apply the hit.
+
+        Delegates a shot from an external to the underlying Ship."""
+        ship = self.ship_at(coord_like)
         if ship is None:
             return Outcome.MISS, None
 
-        hit, sunk = ship.register_shot(coord_like)
+        hit, sunk = ship.take_hit(coord_like)
         return (Outcome.HIT, ship) if hit else (Outcome.MISS, None)
 
 
@@ -235,7 +241,7 @@ class Fleet(BaseModel):
         for ship_type, ship_spec in roster.ships.items():
             for i in range(counts.get(ship_type, 0)):
                 key = f"{ship_type}_{i}"
-                ships[key] = Ship(spec=ship_spec, index=i)
+                ships[key] = Ship(spec=ship_spec, type_index=i)
 
         return cls.model_validate({'id': fleet_id, 'roster': roster,
                                    'ships': ships, 'counts': counts},

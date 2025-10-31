@@ -63,6 +63,10 @@ from board_games.symbols import DefaultSymbols as _BaseSymbols
 
 
 class Symbols(_BaseSymbols):
-    """Symbols to denote ships and actions on the playing board."""
+    """Glyphs to denote actions and events on the playing board.
+
+    Use to render glyphs **not** for domain events. For the latter, see
+    `battleships/shots/Outcome.py`.
+    """
     HIT = '#'
     MISS = '/'

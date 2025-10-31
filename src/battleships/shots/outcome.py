@@ -55,6 +55,8 @@ __all__ = ['Outcome']
 class Outcome(StrEnum):
     """Possible outcomes of a shot at a valid Coordinate.
 
+    Provides (Domain event + message) information that is UI-agnostic.
+
     Attributes:
         HIT: Successful shot.
         MISS: Unsuccessful shot.
@@ -62,6 +64,9 @@ class Outcome(StrEnum):
         OUT: Out-of-bounds.
         INVALID: Coordinates were invalid.
         ERROR: Error encountered.
+
+    TODO: Create adapter for Battleships between
+          `battleships/board/symbols.py/Symbols` and `outcome.py/Outcome`.
     """
 
     # Members: name becomes a human label (str), e.g. "Hit"
@@ -88,3 +93,8 @@ class Outcome(StrEnum):
         Alias for the value of the Enum member.
         """
         return self._value_
+
+    @classmethod
+    def failures(cls):
+        """Outcomes that block a hit/miss calculation."""
+        return cls.INVALID, cls.ERROR, cls.OUT, cls.REPEAT

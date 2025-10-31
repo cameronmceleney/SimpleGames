@@ -238,12 +238,36 @@ class Position(BaseModel):
         """
         return len(self.positions)
 
+    def index(self, coord: Coordinate) -> int | None:
+        """Return the index of a Coordinate.
+
+        Raises ValueError if `coord` is invalid.
+
+        Arguments:
+            coord:
+        """
+        try:
+            return self.positions.index(coord)
+        except ValueError:
+            raise ValueError(f"<{self.__class__.__name__}>"
+                             f"Coordinate '{coord!r}' not in this placement: "
+                             f"{self.positions!r}")
+
     @computed_field
     def __len__(self) -> int:
         return len(self.positions)
 
+    def __call__(self, coord: Coordinate) -> NotImplemented:
+        # TODO: Allow syntax `Position(coord, extend=True)` to automatically
+        #       perform `self.positions.index(coord)` and append `coord` to
+        #       `self.positions` if `extend is True`.
+        return NotImplementedError(f"{self.__class__.__name__} ")
+
     def __iter__(self) -> Iterator[Coordinate]:
         return iter(self.positions)
+
+    def __contains__(self, coord: Coordinate) -> bool:
+        return coord in self.positions
 
     def __getitem__(self, index: int) -> Coordinate:
         return self.positions[index]

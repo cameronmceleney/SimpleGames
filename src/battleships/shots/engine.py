@@ -68,13 +68,15 @@ class Engine:
     def process(target_board: BoardProto,
                 target_fleet: FleetProto,
                 shot_like: Any) -> Info:
-        """Proceedings.
+        """Determine the outcome of a shot.
 
-        Order of checks:
-        1. coerce -> INVALID
-        2. in_bounds -> OUT
-        3. board cell repeat -> REPEAT
-        4. fleet.register_shot -> HIT/MISS
+        Order of checks upon a shot (Test -> result if failed)
+
+            1. coerce -> INVALID
+            2. is in bounds -> OUT
+            3. (board) cell isn't marked -> REPEAT
+            4. hits a ship -> MISS
+            5. Return HIT
         """
         coord, err = Engine.coerce(shot_like)
         if coord is None:
@@ -89,7 +91,7 @@ class Engine:
                 and target_board.is_marked(coord)):
             return Info(coord=coord, outcome=Outcome.REPEAT, repeat=True)
 
-        outcome, ship = target_fleet.register_shot(coord)
+        outcome, ship = target_fleet.apply_shot(coord)
         if outcome is Outcome.MISS:
             target_board.mark_miss(coord)
             return Info(coord=coord, outcome=Outcome.MISS)
@@ -98,6 +100,6 @@ class Engine:
             target_board.mark_hit(coord)
             return Info(coord=coord, outcome=Outcome.HIT,
                         ship_type=getattr(ship, 'type', None),
-                        ship_index=getattr(ship, 'index', None))
+                        ship_index=getattr(ship, 'type_index', None))
 
         return Info(coord=coord, outcome=outcome or Outcome.ERROR)
