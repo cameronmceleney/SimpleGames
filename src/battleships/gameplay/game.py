@@ -80,16 +80,16 @@ class Game:
         self.board = Board(*board_size)
 
         if players_names:
-            self.add_players(*players_names, board_size=board_size)
+            self.add_players(*players_names)
 
         if autoplay:
             self.board.show()
             return
 
-    def add_players(self, *names: str, board_size: tuple[int, int]) -> None:
+    def add_players(self, *names: str) -> None:
         """Add a player to the game."""
         for n in names:
-            p = self._create_player(n, board_size)
+            p = self._create_player(n)
             self.players.append(p)
 
         self.remaining_players = len(self.players)
@@ -97,8 +97,8 @@ class Game:
     def _create_player(
             self,
             name: str,
-            board_size: tuple[int, int],
             config_file: str | None = None,
+            board: Optional[Board] = None,
     ) -> Player:
         """"""
         name_ = name.capitalize()
@@ -107,7 +107,7 @@ class Game:
         player = Player(
             name=name_,
             id=player_id,
-            board=Board(*board_size),
+            board=board or Board(height=self.board.height, width=self.board.width),
 
         )
         log.debug(player)
@@ -136,7 +136,6 @@ class Game:
 
         while True:
             current_player = self.players[self._current_player_idx]
-
             if not current_player.is_playing:
                 self._current_player_idx = (self._current_player_idx + 1) % len(self.players)
                 continue
@@ -148,7 +147,7 @@ class Game:
                 break
 
             opponent = self.players[opp_indices[0]]
-            outcome = current_player.take_turn(opponent=opponent)
+            _ = current_player.take_turn(opponent=opponent)
             Player.end_turn()
 
             if not opponent.is_playing:
@@ -158,8 +157,8 @@ class Game:
 
 
 def test_battleships() -> None:
-    bs = Game(board_size=(8, 8), autoplay=False)
-    bs.add_players("cameron", "karolina", board_size=(10, 10))
+    bs = Game(board_size=(5, 5), autoplay=False)
+    bs.add_players("cameron", "karolina")
     # print(f"Players\n{bs.players}")
     bs.play()
 

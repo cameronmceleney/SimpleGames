@@ -48,14 +48,14 @@ Notes:
 from __future__ import annotations
 
 # Standard library imports
-from typing import Any
+from typing import Any, Literal
 
 # Third-party imports
 import numpy as np
 from pydantic.dataclasses import dataclass
 
 # Local application imports
-from board_games import Board as BaseBoard
+from board_games import Board as BaseBoard, Coordinate
 from battleships.ships import Position
 from utils import CleanText, Divider, JustifyText
 
@@ -71,9 +71,19 @@ class Board(BaseBoard):
     symbols = Symbols
 
     def mark_hit(self, c: Any) -> None:
+        """Apply HIT glyph."""
         self.set(c, self.symbols.HIT)
 
+    def mark_damage(self, c: Any) -> None:
+        """Mark ship damage by turning character to lowercase."""
+        coord = Coordinate.coerce(c)
+        self.require_in_bounds(coord)
+        ch = self.get(coord)
+        if isinstance(chr, str) and len(chr) == 1 and ch.isalpha():
+            self.set(coord, ch.lower())
+
     def mark_miss(self, c: Any) -> None:
+        """Apply MISS glyph."""
         self.set(c, self.symbols.MISS)
 
     def is_marked(self, c: Any) -> bool:
@@ -90,9 +100,32 @@ class Board(BaseBoard):
         for coord in p.positions:
             self.set(coord, symbol)
 
-    def show(self, *, show_guides: bool = True) -> None:
-        print(self.render(show_guides=show_guides,
-                          row_symbols='let', col_symbols='num'))
+    def _opponent_mask(self, ch: str) -> str:
+        """Show hits and missed."""
+        if ch in (self.symbols.HIT, self.symbols.MISS):
+            return ch
+        else:
+            return self.symbols.EMPTY
+
+    def show(
+            self,
+            *,
+            mode: Literal['self', 'opponent'] = 'self',
+            show_guides: bool = True
+    ) -> None:
+        match mode:
+            case 'self':
+                output = self.render(show_guides=show_guides,
+                                     row_symbols='let', col_symbols='num')
+            case 'opponent':
+                output = self.render_with_mask(self._opponent_mask,
+                                               show_guides=show_guides,
+                                               row_symbols='let',
+                                               col_symbols='num')
+            case _:
+                raise NotImplementedError("Attempted to use unsupported key.")
+
+        print(output)
 
     def __repr__(self, print_headers: bool = True):
 

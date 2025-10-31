@@ -41,21 +41,21 @@ from __future__ import annotations
 
 # Standard library imports
 from typing import Optional, TYPE_CHECKING
-from typing_extensions import deprecated
 
 # Third-party imports
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 # Local application imports
 from board_games import Coordinate
-from battleships.board import Board, Symbols
+from battleships.board import Board
 from battleships.ships import Fleet
 import battleships.shots as shots
+
+from .messages import parse, Commands, Registry, make_guess_cmd, exit_cmd, help_cmd, show_opp_cmd, show_own_cmd
 
 if TYPE_CHECKING:
     from battleships.shots import Outcome
 
-from .messages import PlayerMessages
 
 from utils import Divider, load_yaml
 from src.log import get_logger
@@ -126,40 +126,6 @@ class Player(BaseModel):
 
             self.board.place(ship.placement, symbol=(ship.symbol or ship.spec.symbol))
 
-    @deprecated("Player should not be directly applying shots! Instead, use "
-                "`shots.Engine.process().")
-    @staticmethod
-    def apply_shot(target_player: 'Player', shot: 'Coordinate') -> 'Outcome':
-        """Core logic for a player taking a shot.
-
-        Method doesn't support I/O. For the rules applied to each `shot` see
-        the attribute descriptions of ``shots.Outcome``.
-
-        Arguments:
-            target_player: Another player's (game-specific) board being aimed at.
-            shot: Grid-tile attempting to be shot.
-        """
-        board = target_player.board
-        if not board.in_bounds(shot):
-            return shots.outcome.OUT
-
-        cell = board.get(shot)
-        if cell in (Symbols.HIT, Symbols.MISS):
-            return shots.Outcome.REPEAT
-
-        # Check opponent's fleet for hit tracking
-        outcome, ship = target_player.fleet.register_shot(shot)
-        if outcome is shots.Outcome.MISS:
-            board.mark_miss(shot)
-        elif outcome is shots.Outcome.HIT:
-            board.mark_hit(shot)
-            # TODO. Add ability to mark sunk ships differently.
-        else:
-            # Guarding against a missed ShotsOutcome.REPEAT
-            pass
-
-        return outcome
-
     def record_shot(self, shot: Coordinate) -> None:
         self.guesses.append(shot)
 
@@ -177,17 +143,42 @@ class Player(BaseModel):
         Arguments:
             opponent: Another player to target.
         """
-        raw = input(f"<Player {self.name}> {PlayerMessages.make_guess}")
+        print(f"\n{Divider.console.make_title(f"Player", f"{self.name}")}")
+        opponent.board.show(mode='opponent')
 
-        shot_attempt = shots.Engine.process(opponent.board, opponent.fleet, raw)
-        if shot_attempt.outcome not in shots.Outcome.failures():
-            self.record_shot(shot_attempt.coord)
-        print(f"<Player {self.id}> {shot_attempt.outcome.message}")
-        return shot_attempt.outcome
+        # Prompt for next shot
+        while True:
+            raw = input(make_guess_cmd)
+            cmd = parse(raw)
+
+            if cmd is Commands.EXIT:
+                print(exit_cmd())
+                raise SystemExit
+            elif cmd is Commands.HELP:
+                print(help_cmd(commands=Registry.instance().commands_list()))
+            elif cmd is Commands.SHOW_OWN_FLEET:
+                print(show_own_cmd())
+                self.board.show(mode="self", show_guides=True)
+            elif cmd is Commands.SHOW_OPP_FLEET:
+                print(show_opp_cmd())
+                opponent.board.show(mode="opponent", show_guides=True)
+
+            # No special commands; process shot
+            shot_attempt = shots.Engine.process(opponent.board, opponent.fleet, raw)
+            print(shot_attempt.outcome.message)
+
+            if shot_attempt.outcome not in (shots.Outcome.INVALID, shots.Outcome.ERROR, shots.Outcome.OUT):
+                self.record_shot(shot_attempt.coord)
+
+            if shot_attempt.outcome in shots.Outcome.failures():
+                continue
+
+            return shot_attempt.outcome
 
     @staticmethod
     def end_turn() -> None:
         """Orchestrator to end a player's turn."""
+        input("Press Enter to end turn...")
         print('\n' * 2)
 
     def __repr__(self, print_headers: bool = True) -> str:

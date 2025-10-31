@@ -136,6 +136,7 @@ class Divider(StrEnum):
         suffix: tuple[str, str] = ('', ''),
         **kwargs
     ) -> str:
+        details = details or ''
         title_ = JustifyText.kv(key=f"{prefix[0]}{str(header).capitalize()}{prefix[1]}",
                                 value=f"{suffix[0]}{str(details).capitalize()}{suffix[1]}",
                                 **kwargs)

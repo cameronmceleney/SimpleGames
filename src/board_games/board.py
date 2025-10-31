@@ -52,7 +52,7 @@ Notes:
 from __future__ import annotations
 
 # Standard library imports
-from typing import Any, Literal
+from typing import Any, Callable, Literal
 
 # Third-party imports
 from pydantic.dataclasses import dataclass
@@ -156,3 +156,62 @@ class Board(Grid):
             lines.insert(1, pad + hline)
 
         return '\n'.join(lines) + '\n'
+
+    def render_with_mask(
+            self,
+            mask: Callable,
+            show_guides: bool = True,
+            *,
+            row_symbols: Literal['let', 'num'] = 'let',
+            col_symbols: Literal['let', 'num'] = 'num'
+    ):
+        """Render board after transforming cells by applying a `mask`.
+
+        Use cases include:
+            - Displaying a player's guessed tiles (with hits and misses) during
+              a game of Battleships.
+
+        Arguments:
+             mask:
+             show_guides:
+             row_symbols:
+             col_symbols:
+
+        TODO:
+            - Simply `render_with_mask` and `render` by creating common private
+              method.
+        """
+        lines: list[str] = []
+        start_char = 65
+        pad: str = self.symbols.EMPTY * (4 if show_guides else 2)
+
+        match col_symbols:
+            case 'let':
+                cid_iters = (chr(start_char + j) for j in range(self.width))
+            case 'num':
+                cid_iters = (str(j) for j in range(self.width))
+            case _:
+                raise ValueError(f"Invalid col_symbols.")
+
+        col_ids = self.symbols.EMPTY.join(cid_iters)
+
+        if show_guides:
+            lines.append(pad + col_ids)
+            hline = self.width * (self.symbols.VERTICAL_DIVIDER + self.symbols.EMPTY)
+            lines.append(pad + hline)
+
+        for i in range(self.height):
+            row = [mask(ch) for ch in self.grid[i]]
+            if show_guides:
+                rid = chr(start_char + i) if row_symbols == 'let' else i
+                lines.append(f"{rid}"
+                             f"{self.symbols.SPACE}"
+                             f"{self.symbols.HORIZONTAL_DIVIDER}"
+                             f"{self.symbols.SPACE}"
+                             f"{self.symbols.EMPTY.join(row)}")
+            else:
+                lines.append(self.symbols.EMPTY.join(row))
+
+        return '\n'.join(lines) + '\n'
+
+
