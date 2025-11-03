@@ -40,9 +40,9 @@ Notes:
 from __future__ import annotations
 
 # Standard library imports
-from enum import auto, Enum
+from enum import auto, Enum, StrEnum
 from dataclasses import dataclass
-from typing import ClassVar, Dict, Optional, Self
+from typing import ClassVar, Optional, Self
 
 # Third-party imports
 
@@ -51,7 +51,26 @@ from typing import ClassVar, Dict, Optional, Self
 # Module-level constants
 
 
+class Message(StrEnum):
+    """Text that is displayed in the console.
+
+    TODO:
+        - Find a way to distinguish 'Message' cases from 'Command' cases.
+        - Turn `ELIMINATED` into method that prints actual player's name.
+    """
+    END_TURN = "Press 'Enter' to end turn..."
+    AI_END_TURN = "Turn complete."
+    WINNER = 'Congratulations on winning!'
+    KEEP_PLAYING = ' No winner (no active players).'
+    ELIMINATED = "This player has been eliminated!"
+
+
 class Command(Enum):
+    """Commands for printing a string when a keyword is detected in I/O..
+
+    TODO:
+        - Find a way to distinguish 'Command' cases from 'Message' cases.
+    """
     HELP = auto()
     EXIT = auto()
     GUESS = auto()
