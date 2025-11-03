@@ -58,7 +58,7 @@ class Message(StrEnum):
         - Find a way to distinguish 'Message' cases from 'Command' cases.
         - Turn `ELIMINATED` into method that prints actual player's name.
     """
-    END_TURN = "Press 'Enter' to end turn..."
+    END_TURN = ">>> Press 'Enter' to end turn..."
     AI_END_TURN = "Turn complete."
     WINNER = 'Congratulations on winning!'
     KEEP_PLAYING = ' No winner (no active players).'
@@ -128,7 +128,7 @@ class CommandSpec:
 make_guess_cmd = CommandSpec(
     command=Command.GUESS,
     labels=('guess', 'shot'),
-    message="Enter the co-ordinates of your next shot: "
+    message=">>> Enter the co-ordinates of your next shot: "
 )
 
 help_cmd = CommandSpec(

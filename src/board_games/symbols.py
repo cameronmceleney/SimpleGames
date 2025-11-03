@@ -75,6 +75,7 @@ class DefaultSymbols:
     """Core symbols all 2D board games require."""
     EMPTY = ' '
     SPACE = ' '
+
     VERTICAL_DIVIDER = '–'  # This is an em-dash!
     HORIZONTAL_DIVIDER = '|'
 

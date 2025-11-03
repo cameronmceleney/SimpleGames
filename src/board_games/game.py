@@ -40,20 +40,26 @@ Notes:
 from __future__ import annotations
 
 # Standard library imports
-from typing import Any, Callable, Optional, Protocol, Sequence
+from typing import Any, Callable, Optional, Protocol
 
-from battleships.gameplay import Game
-from .conditions import last_playing_standing
 # Third-party imports
 
 
 # Local application imports
-from .player import PlayerLike
 from .turns import RoundRobin
+
+__all__ = ['PlayerLike', 'BaseGame']
+
+
+class PlayerLike(Protocol):
+    name: str
+    is_still_playing: bool
+    def take_turn(self, opponent: 'PlayerLike') -> Any: ...
+    def end_turn(self) -> None: ...
 
 
 class BaseGame:
-    """Engine-only.
+    """Engine-only orchestator.
 
     Doesn't contain any I/O or game-specific rules.
 
@@ -61,6 +67,10 @@ class BaseGame:
         players:
         turns:
         emit:
+
+    TODO:
+     - Change `self.turns` to be initialised generic TurnOrder, not always
+       RoundRobin.
     """
 
     def __init__(self, *,
@@ -69,11 +79,29 @@ class BaseGame:
         self.turns = RoundRobin()
         self.emit = emitter or (lambda _: None)
 
+    @property
+    def remaining_players(self) -> int:
+        """Players still in the game."""
+        return sum(1 for player in self.players if player.is_still_playing)
+
+    @property
+    def current_player_index(self) -> Optional[int]:
+        return self.turns.current()
+
+    @property
+    def current_player(self) -> Optional[PlayerLike]:
+        idx = self.turns.current()
+        return None if idx is None else self.players[idx]
+
+    def _reseed_turns(self) -> None:
+        self.turns.seed(
+            i for i, player in enumerate(self.players)
+            if player.is_still_playing
+        )
+
     def add_players(self, *players: PlayerLike) -> None:
         self.players.extend(players)
-        # TODO: change next line to make better use of RoundRobin methods
-        self.turns.seed(i for i, player in enumerate(players)
-                        if player.is_still_playing)
+        self._reseed_turns()
 
     def pick_opponent(self, own_idx: int) -> Optional[int]:
         ids = self.turns.alive_of(own_idx,
@@ -81,54 +109,50 @@ class BaseGame:
         return ids[0] if ids else None
 
     def winner(self) -> Optional[int]:
-        return last_playing_standing(range(len(self.players)),
-                                     lambda i: self.players[i].is_still_playing)
+        self.turns.remove_defeated(lambda i: self.players[i].is_still_playing)
+        return self.turns.current() if self.turns.has_winner() else None
 
     def play(self):
-
         if len(self.players) < 2:
             self.emit("Need at least two players to play game")
             return None
 
         if self.turns.current() is None:
-            # TODO: change next line to make better use of RoundRobin methods
-            self.turns.seed(i for i, player in enumerate(self.players)
-                            if player.is_still_playing)
+            self._reseed_turns()
 
-        # TODO: separate `play_loop` into several smaller methods (perhaps with private helpers)
         while True:
+            # Start the turn
+            self.turns.remove_defeated(lambda i: self.players[i].is_still_playing)
+
+            # Check for winner
             winner = self.winner()
             if winner is not None:
                 self.emit(f"Winner: {self.players[winner].name}")
                 return winner
 
-            if len(self.turns) <= 1:
-                current_player = self.turns.current()
-                if current_player is not None:
-                    self.emit(f"Winner: {self.players[current_player].name}")
-                    return current_player
-
-                self.emit(f"No winner. Tie?")
-                return None
-
+            # Check for draw
             me_idx = self.turns.current()
             if me_idx is None:
+                self.emit("No more players or a winner. Tie?")
                 return None
 
+            # Check if the player themself are still in the game
             me = self.players[me_idx]
             if not me.is_still_playing:
                 self.turns.remove(me_idx)
                 continue
 
-            opponent = self.pick_opponent(me_idx)
-            if opponent is None:
+            # Identify opponent
+            opponent_idx = self.pick_opponent(me_idx)
+            if opponent_idx is None:
                 self.emit(f"Winner: {me.name}")
-                return me
+                return me_idx
 
-            outcome = me.take_turn(self.players[opponent])
+            # Process one full turn for the player
+            opponent = self.players[opponent_idx]
+            _ = me.take_turn(opponent)
             me.end_turn()
-
-            if not self.players[opponent].is_still_playing:
-                self.turns.remove(opponent)
+            if not opponent.is_still_playing:
+                self.turns.remove(opponent_idx)
 
             self.turns.advance()

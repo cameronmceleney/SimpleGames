@@ -52,18 +52,77 @@ Notes:
 from __future__ import annotations
 
 # Standard library imports
-from typing import Any, Callable, Literal
+from dataclasses import dataclass, field
+from typing import (
+    Any,
+    Callable,
+    ClassVar,
+    Iterable,
+    Literal,
+    Optional,
+    Self,
+    Type,
+    TypeAlias)
 
 # Third-party imports
-from pydantic.dataclasses import dataclass
+import numpy as np
 
 # Local application imports
 from .coordinate import Coordinate
-from .grid import Grid
+from .symbols import SymbolsProto, DefaultSymbols
+
+__all__ = ['BaseGrid', 'BaseBoard']
+
+COL_AND_ROW_RENDER_SYMBOLS: TypeAlias = Literal['let', 'num']
 
 
 @dataclass(slots=True)
-class Board(Grid):
+class BaseGrid:
+    """2D grid of mutable characters.
+
+    Game-agnostic.
+
+    Attributes:
+        height:
+        width:
+        grid:
+        symbols:
+    """
+    height: int
+    width: int
+    grid: np.ndarray = field(init=False, repr=False)
+
+    symbols: ClassVar[Type[SymbolsProto]] = DefaultSymbols
+
+    def __post_init__(self):
+        self.grid = self._new_grid()
+
+    def _new_grid(self) -> np.ndarray:
+
+        """Allocate a new grid."""
+        return np.full(shape=(self.height, self.width),
+                       fill_value=self.symbols.EMPTY,
+                       dtype='U1')  # 1-character unicode cells
+
+    def reset(self, inplace: bool = True) -> Optional[np.ndarray]:
+        """Reset the board to EMPTY."""
+        new_grid = self._new_grid()
+
+        if inplace:
+            self.grid = new_grid
+            return None
+
+        return new_grid
+
+    def clone(self) -> Self:
+        """Deep copy the board including the grid."""
+        g = type(self.__class__)(height=self.height, width=self.width)
+        g.grid = self.grid.copy()
+        return g
+
+
+@dataclass(slots=True)
+class BaseBoard(BaseGrid):
     """2D game board with bounds-checked cell access and rendering.
 
     This class contains methods general to all 2D board games.
@@ -74,7 +133,6 @@ class Board(Grid):
         grid:
         symbols:
     """
-    ...
 
     def in_bounds(self, coord_like: Any) -> bool:
         """Check if a coordinate is within the grid."""
@@ -107,63 +165,87 @@ class Board(Grid):
 
         self.grid[coord.as_tuple()] = symbol
 
+    def _col_ids(self, *,
+                 col_symbols: COL_AND_ROW_RENDER_SYMBOLS = 'let',
+                 start_char: int):
+        match col_symbols:
+            case 'let':
+                cids = (chr(start_char + j) for j in range(self.width))
+            case 'num':
+                cids = (str(j) for j in range(self.width))
+            case _:
+                raise ValueError(f"Invalid col_symbols.")
+
+        return self.symbols.EMPTY.join(cids)
+
+    @staticmethod
+    def _row_label(
+            i: int, *,
+            row_symbols: COL_AND_ROW_RENDER_SYMBOLS = 'let',
+            start_char: int):
+        return chr(start_char + i) if row_symbols == 'let' else str(i)
+
+    def _render_core(
+            self, *,
+            show_guides: bool,
+            row_symbols: COL_AND_ROW_RENDER_SYMBOLS = 'let',
+            col_symbols: COL_AND_ROW_RENDER_SYMBOLS = 'let',
+            row_map: Optional[Callable[[Iterable[str]], Iterable[str]]] = None
+    ) -> str:
+        """Common renderer."""
+
+        lines: list[str] = []
+        start_char = 65  # 'A'
+        pad = self.symbols.EMPTY * (4 if show_guides else 2)
+
+        # Header
+        if show_guides:
+            col_ids = self._col_ids(col_symbols=col_symbols,
+                                    start_char=start_char)
+            lines.append(pad + col_ids)
+            hline = self.width * (self.symbols.VERTICAL_DIVIDER + self.symbols.SPACE)
+            lines.append(pad + hline)
+
+        # Body
+        for i in range(self.height):
+            row = self.grid[i]
+            row_iter = row if row_map is None else row_map(row)
+
+            joined = self.symbols.EMPTY.join(row_iter)
+
+            if show_guides:
+                rid = self._row_label(i, row_symbols=row_symbols,
+                                      start_char=start_char)
+                lines.append(f"{rid}{self.symbols.SPACE}"
+                             f"{self.symbols.HORIZONTAL_DIVIDER}"
+                             f"{self.symbols.SPACE}{joined}")
+            else:
+                lines.append(joined)
+
+        return '\n'.join(lines)
+
     def render(
         self,
         show_guides: bool = True,
         *,
-        row_symbols: Literal['let', 'num'] = 'let',
-        col_symbols: Literal['let', 'num'] = 'num'
+        row_symbols: COL_AND_ROW_RENDER_SYMBOLS = 'let',
+        col_symbols: COL_AND_ROW_RENDER_SYMBOLS = 'num'
     ) -> str:
         """Render a string view of the current board-state."""
-        lines: list[str] = []
-        start_char = 65  # chr(65) = 'A'
-        pad: str = self.symbols.EMPTY * (4 if show_guides else 2)
-
-        sym = self.symbols  # Alias to shorten code of print statements
-
-        match col_symbols:
-            case 'let':
-                cid_iters = (chr(start_char + j) for j in range(self.width))
-            case 'num':
-                cid_iters = (str(j) for j in range(self.width))
-            case _:
-                raise ValueError(f"Invalid col_symbols.")
-
-        col_ids = sym.EMPTY.join(cid_iters)
-
-        # Begin rendering Board
-        if show_guides:
-            lines.append(pad + col_ids)
-
-        # Generate each row of the grid with its identifier
-        for i in range(self.height):
-            row = self.grid[i]
-            if show_guides:
-                # Add row label to grid starting from 'A'
-                match row_symbols:
-                    case 'let': rid = chr(start_char + i)
-                    case 'num': rid = i
-                    case _: raise ValueError(f"Invalid row_symbol)")
-
-                lines.append(f"{rid}{sym.SPACE}"
-                             f"{sym.HORIZONTAL_DIVIDER}{sym.SPACE}"
-                             f"{sym.EMPTY.join(row)}")
-            else:
-                lines.append(self.symbols.EMPTY.join(row))
-
-        if show_guides:
-            hline = self.width * (sym.VERTICAL_DIVIDER + sym.SPACE)
-            lines.insert(1, pad + hline)
-
-        return '\n'.join(lines) + '\n'
+        return self._render_core(
+            show_guides=show_guides,
+            row_symbols=row_symbols,
+            col_symbols=col_symbols,
+            row_map=None
+        )
 
     def render_with_mask(
             self,
-            mask: Callable,
+            mask: Callable[[str], str],
             show_guides: bool = True,
             *,
-            row_symbols: Literal['let', 'num'] = 'let',
-            col_symbols: Literal['let', 'num'] = 'num'
+            row_symbols: COL_AND_ROW_RENDER_SYMBOLS = 'let',
+            col_symbols: COL_AND_ROW_RENDER_SYMBOLS = 'num'
     ):
         """Render board after transforming cells by applying a `mask`.
 
@@ -181,37 +263,13 @@ class Board(Grid):
             - Simply `render_with_mask` and `render` by creating common private
               method.
         """
-        lines: list[str] = []
-        start_char = 65
-        pad: str = self.symbols.EMPTY * (4 if show_guides else 2)
+        def _apply(row: Iterable[str]) -> Iterable[str]:
+            return (mask(ch) for ch in row)
 
-        match col_symbols:
-            case 'let':
-                cid_iters = (chr(start_char + j) for j in range(self.width))
-            case 'num':
-                cid_iters = (str(j) for j in range(self.width))
-            case _:
-                raise ValueError(f"Invalid col_symbols.")
-
-        col_ids = self.symbols.EMPTY.join(cid_iters)
-
-        if show_guides:
-            lines.append(pad + col_ids)
-            hline = self.width * (self.symbols.VERTICAL_DIVIDER + self.symbols.EMPTY)
-            lines.append(pad + hline)
-
-        for i in range(self.height):
-            row = [mask(ch) for ch in self.grid[i]]
-            if show_guides:
-                rid = chr(start_char + i) if row_symbols == 'let' else i
-                lines.append(f"{rid}"
-                             f"{self.symbols.SPACE}"
-                             f"{self.symbols.HORIZONTAL_DIVIDER}"
-                             f"{self.symbols.SPACE}"
-                             f"{self.symbols.EMPTY.join(row)}")
-            else:
-                lines.append(self.symbols.EMPTY.join(row))
-
-        return '\n'.join(lines) + '\n'
-
+        return self._render_core(
+            show_guides=show_guides,
+            row_symbols=row_symbols,
+            col_symbols=col_symbols,
+            row_map=_apply
+        )
 

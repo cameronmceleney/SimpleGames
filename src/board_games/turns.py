@@ -155,7 +155,7 @@ class RoundRobin(TurnOrder):
         if len(self._dq) == 1:
             return self._dq[0]
         # Peak without mutating the deque, and respecting chosen direction
-        return self._dq[self._dir]
+        return self._dq[1] if self._dir == -1 else self._dq[-1]
 
     def advance(self) -> Optional[int]:
         if not self._dq:

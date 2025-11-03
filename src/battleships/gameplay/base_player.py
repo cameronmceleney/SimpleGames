@@ -87,6 +87,11 @@ class BasePlayer(BaseModel, ABC):
     board: Board = Field(default_factory=lambda: BasePlayer.default_board())
     guesses: list[Coordinate] = Field(default_factory=list)
 
+    @property
+    def is_still_playing(self) -> bool:
+        """Check if this player has any surviving ships."""
+        return self.fleet.is_alive
+
     @staticmethod
     def default_fleet() -> 'Fleet':
         return Fleet.load_from_yaml(fleet_id='basic_fleet_1')
@@ -101,11 +106,6 @@ class BasePlayer(BaseModel, ABC):
         banner = Divider.console.make_title("Player", self.name)
         print(f"\n{banner}")
         return banner
-
-    @property
-    def is_still_playing(self) -> bool:
-        """Check if this player has any surviving ships."""
-        return self.fleet.is_alive
 
     def apply_positions(self, filepath: Optional[str]) -> None:
         """Load and place onto their board a player's ship placements.
@@ -156,7 +156,7 @@ class BasePlayer(BaseModel, ABC):
             raw = self._get_shot_input(opponent)
 
             if _is_command(raw):
-                # Subclass hasn't command semantics
+                # Subclass has command semantics
                 continue
 
             coord = Coordinate.coerce(raw)
@@ -169,7 +169,7 @@ class BasePlayer(BaseModel, ABC):
                 self.record_shot(turn.coord)
 
             if turn.outcome in shots.Outcome.failures():
-                self._on.outcome(turn, opponent, printable=False)
+                self._on_outcome(turn, opponent, printable=False)
                 continue
 
             self._on_outcome(turn, opponent, printable=False)
