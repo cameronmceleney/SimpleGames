@@ -155,6 +155,11 @@ class BasePlayer(BaseModel, ABC):
         while True:
             raw = self._get_shot_input(opponent)
 
+            if raw is None:
+                # Guard against subclass bugs
+                log.debug(f"raw unexpectedly is 'None'.")
+                continue
+
             if _is_command(raw):
                 # Subclass has command semantics
                 continue
