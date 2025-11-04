@@ -41,7 +41,7 @@ from __future__ import annotations
 
 # Standard library imports
 import random
-from typing import Optional, Union, TYPE_CHECKING
+from typing import Literal, Optional, TYPE_CHECKING, Union
 
 # Third-party imports
 from pydantic import PrivateAttr
@@ -57,12 +57,11 @@ from .messages import (
 
 from .base_player import BasePlayer, DEFAULT_PLAYER
 from .messages import Message, PlayerMessages
-from utils import Divider
 
 from src.log import get_logger
 
 if TYPE_CHECKING:
-    from board_games.coordinate import CoordLike
+    from board_games.coordinate import coord_type, CoordLike
     from battleships.shots.info import Info
 
 log = get_logger(__name__)
@@ -287,67 +286,52 @@ class AIPlayer(BasePlayer):
         if not hits:
             return
 
-        # Only one hit so pick one of four nearest neighbours
         if len(hits) == 1:
-            # Prefer `*hits[0]` to `(x, y) = hits[0]` to avoid casting and initialisations
-            self._enqueue_if_legal(opponent,
-                                   cells=self._nearest_neighbours(*hits[0]))
-            return
+            self._enqueue_after_single_hit(opponent, hits[0])
 
-        # >= 2 hits so pick one of two cells along that vector
-        same_row = {}
-        same_col = {}
+    def _enqueue_after_single_hit(
+            self, opponent: 'BasePlayer', hit: 'coord_type'
+    ) -> None:
+        """Hit one target so pick one of its four nearest neighbours."""
+        self._enqueue_if_legal(opponent, cells=self._nearest_neighbours(*hit))
+
+    @staticmethod
+    def _aligned_hits_or_none(hits: list['coord_type']) -> Optional[tuple[str, list['coord_type']]]:
+        """Attempt to establish a vector between hits to pick along it.
+
+        Two or more hits may define a line. If so, the next picked cell should
+        be adjacent to either end of this line.
+        """
+        same_row: dict[int, list['coord_type']] = {}
+        same_col: dict[int, list['coord_type']] = {}
+
         for x, y in hits:
             same_row.setdefault(x, []).append((x, y))
             same_col.setdefault(y, []).append((x, y))
 
-        # Prefer the alignment with >= 2 cells
-        aligned: Optional[tuple[str, list['CoordLike']]] = None
         for x, cells in same_row.items():
-            # Turn if statement into helper function
             if len(cells) >= 2:
-                # Sort by `y` along row
                 cells.sort(key=lambda c: c[1])
-                aligned = ('row', cells)
-                break
+                return 'row', cells
 
-            if aligned is None:
-                for y, cells in same_col.items():
-                    if len(cells) >= 2:
-                        cells.sort(key=lambda c: c[0])
-                        aligned = ('col', cells)
-                        break
+        for y, cells in same_col.items():
+            if len(cells) >= 2:
+                cells.sort(key=lambda c: c[0])
+                return 'col', cells
 
-            # No clear alignment yet, so pick one of 4 neighbours around most
-            # recent hit
-            if aligned is None:
-                self._enqueue_if_legal(opponent,
-                                       cells=self._nearest_neighbours(*hits[-1]))
-                return
+        return None
 
-            mode, cells = aligned
-            first, last = cells[0], cells[-1]
+    def _enqueue_along_alignment(
+            self, opponent: 'BasePlayer', mode: Literal['row', 'col'], cells: list['coord_type']
+    ) -> None:
+        first, last = cells[0], cells[-1]
+        if mode == 'row':
+            x = first[0]
+            y_left, y_right = first[1] - 1, last[1] + 1
+            candidates = [(x, y_left), (x, y_right)]
+        else:
+            y = first[1]
+            x_up, x_down = first[0] - 1, last[0] + 1
+            candidates = [(x_up, y), (x_down, y)]
 
-            # Turn each if block into helper function
-            if mode == 'row':
-                x = first[0]
-                y_left = first[1] - 1
-                y_right = last[1] + 1
-                candidates = [(x, y_left), (x, y_right)]
-            else:
-                y = first[1]
-                x_up = first[0] - 1
-                x_down = last[0] + 1
-                candidates = [(x_up, y), (x_down, y)]
-
-            self._enqueue_if_legal(opponent, cells=candidates)
-            return
-
-    def _enqueue_after_single_hit(self):
-        ...
-
-    def _aligned_hits_or_none(self):
-        ...
-
-    def _enqueue_along_alignment(self):
-        ...
+        self._enqueue_if_legal(opponent, cells=candidates)

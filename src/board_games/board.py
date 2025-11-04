@@ -53,17 +53,9 @@ from __future__ import annotations
 
 # Standard library imports
 from dataclasses import dataclass, field
-from typing import (
-    Any,
-    Callable,
-    ClassVar,
-    Iterable,
-    Literal,
-    Optional,
-    Self,
-    Type,
-    TypeAlias,
-    TYPE_CHECKING)
+from typing import (Any, Callable, ClassVar, Iterable, Literal, Optional,
+                    Protocol, Self, Type, TypeAlias, TYPE_CHECKING)
+from typing_extensions import runtime_checkable
 
 # Third-party imports
 import numpy as np
@@ -76,7 +68,7 @@ if TYPE_CHECKING:
     from board_games.coordinate import CoordLike
 
 
-__all__ = ['BaseGrid', 'BaseBoard']
+__all__ = ['BaseGrid', 'BoardLike', 'BaseBoard']
 
 COL_AND_ROW_RENDER_SYMBOLS: TypeAlias = Literal['let', 'num']
 
@@ -124,6 +116,13 @@ class BaseGrid:
         g = type(self.__class__)(height=self.height, width=self.width)
         g.grid = self.grid.copy()
         return g
+
+
+@runtime_checkable
+class BoardLike(Protocol):
+    height: int
+    width: int
+    def in_bounds(self, coord_like: 'CoordLike') -> bool: ...
 
 
 @dataclass(slots=True)

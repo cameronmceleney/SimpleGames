@@ -55,6 +55,9 @@ from pydantic import BeforeValidator
 
 __all__ = [
     'Point2D',
+    'PointLike',
+    'PointType',
+    'CoordType',
     'coord_type',
     'CoordLike',
     'value_to_int',
@@ -79,13 +82,18 @@ class Point2D(NamedTuple):
     y: int
 
 
+# Probably should be private to the file.
 coord_type: TypeAlias = tuple[int, int]
 """Canonical grid index type-alias value storage / indexing."""
 
+CoordType: TypeAlias = tuple[int, int]
+PointType: TypeAlias = tuple[int, int]
+
+PointLike: TypeAlias = Union[tuple[int, int], Point2D]
+
 
 CoordLike: TypeAlias = Union[
-    coord_type,
-    'Point2D',
+    'PointLike',
     'Coordinate',
     Mapping[str, Any],
     str

@@ -6,6 +6,7 @@ from board_games.board import (
     BaseGrid as Grid,
     BaseBoard as Board)
 from board_games.game import BaseGame
+from board_games.messages import Messages
 from board_games.turns import RoundRobin
 
 __all__ = [
@@ -18,5 +19,7 @@ __all__ = [
     'Grid',
     'Board',
     'BaseGame',
+
+    'Messages',
     'RoundRobin',
 ]
