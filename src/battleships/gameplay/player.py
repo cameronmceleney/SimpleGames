@@ -56,11 +56,14 @@ from .messages import (
     make_guess_cmd, exit_cmd, help_cmd, show_opp_cmd, show_own_cmd)
 
 from .base_player import BasePlayer, DEFAULT_PLAYER
-from .messages import Message
+from .messages import Message, PlayerMessages
+from utils import Divider
+
 from src.log import get_logger
 
 if TYPE_CHECKING:
     from board_games.coordinate import coordinate_type
+    from battleships.shots.info import Info
 
 log = get_logger(__name__)
 
@@ -113,7 +116,7 @@ class HumanPlayer(BasePlayer):
         return raw
 
     def _on_outcome(
-            self, info: 'shots.Info', opponent: 'HumanPlayer', *, printable: bool
+            self, info: 'Info', opponent: 'HumanPlayer', *, printable: bool
     ) -> None:
         print(info.outcome.message)
 
@@ -160,16 +163,39 @@ class AIPlayer(BasePlayer):
         self._tried.add((x, y))
         return f"{x},{y}"
 
+    def _print_outcome(self, opponent: 'BasePlayer', info: 'Info', *, x: int, y: int):
+        """Print messages summarising the turn.
+
+        Keywords for ``x`` and ``y`` to ensure they're passed intentionally.
+
+        Order of messages:
+            1. Banner
+            2. Guessed co-ordinate
+            3. `Outcome` message
+            4. Player's fleet view (visual summary)
+            5. 'Turn complete' message
+        """
+        PlayerMessages.banner(self.name)
+        print(f">>> Guessed the co-ordinates: {x}, {y}")   # TODO: Turn into a `Message`
+        print(info.outcome.message)
+
+        print('\n' + show_own_cmd())
+        opponent.board.show(mode='self', show_guides=True)
+
     def _on_outcome(
-            self, info: 'shots.Info', opponent: 'BasePlayer', *, printable: bool
+            self, info: 'Info', opponent: 'BasePlayer', *, printable: bool
     ) -> None:
+        """Update internal state and present AI's turn to the other player."""
         coord = info.coord
         self._tried.add(coord.as_tuple())
+
+        self._print_outcome(opponent, info, x=coord.x, y=coord.y)
 
         if info.outcome is not shots.Outcome.HIT:
             # Early guard prevents repeating a previous guess
             return
 
+        # Structure code in this way to avoid unnecessary repetition
         if info.ship_type is not None and info.ship_index is not None:
             ship_key = f"{info.ship_type}_{info.ship_index}"
             ship = opponent.fleet.ships.get(ship_key)
@@ -193,10 +219,11 @@ class AIPlayer(BasePlayer):
 
     def end_turn(self) -> None:
         """Non-blocking messages to console."""
-        print(Message.AI_END_TURN, end='\n\n')
+        print('\n' + Message.AI_END_TURN, end='\n\n')
 
     def _is_legal(self, opponent: 'BasePlayer', x: int, y: int) -> bool:
         """Check if `x,y` is in-bounds and not previously tried."""
+        # Make use of existing in_bounds() method
         return (x, y) not in self._tried and opponent.board.in_bounds((x, y))
 
     def _random_untried(self, opponent: 'BasePlayer') -> 'coordinate_type':
@@ -209,7 +236,8 @@ class AIPlayer(BasePlayer):
 
         return random.choice(candidates) if candidates else (0, 0)
 
-    def _nearest_neighbours(self, x: int, y: int) -> list['coordinate_type']:
+    @staticmethod
+    def _nearest_neighbours(x: int, y: int) -> list['coordinate_type']:
         """Orthogonal Von-Neumann neighbours.
 
         See my micromagnetic code for explanation.
