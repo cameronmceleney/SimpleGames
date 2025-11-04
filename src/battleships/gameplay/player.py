@@ -62,7 +62,7 @@ from utils import Divider
 from src.log import get_logger
 
 if TYPE_CHECKING:
-    from board_games.coordinate import coordinate_type
+    from board_games.coordinate import CoordLike
     from battleships.shots.info import Info
 
 log = get_logger(__name__)
@@ -144,9 +144,10 @@ class AIPlayer(BasePlayer):
     TODO:
      - Add logic so that the AI places their own ships.
     """
-    _tried: set['coordinate_type'] = PrivateAttr(default_factory=set)
-    _hunt_queue: list['coordinate_type'] = PrivateAttr(default_factory=list)
-    _hits_by_ship: dict[str, set['coordinate_type']] = PrivateAttr(default_factory=dict)
+    _tried: set['CoordLike'] = PrivateAttr(default_factory=set)
+    _hunt_queue: list['CoordLike'] = PrivateAttr(default_factory=list)
+    _hits_by_ship: dict[str, set[
+        'CoordLike']] = PrivateAttr(default_factory=dict)
 
     def _get_shot_input(self, opponent: 'BasePlayer') -> Union[str, Commands]:
         """Return a coord-like string `x,y` for the next shot.
@@ -155,7 +156,7 @@ class AIPlayer(BasePlayer):
         """
         while self._hunt_queue:
             x, y = self._hunt_queue.pop(0)
-            if self._is_legal(opponent, x, y):
+            if self._is_legal(opponent, x=x, y=y):
                 self._tried.add((x, y))
                 return f"{x},{y}"
 
@@ -221,12 +222,12 @@ class AIPlayer(BasePlayer):
         """Non-blocking messages to console."""
         print('\n' + Message.AI_END_TURN, end='\n\n')
 
-    def _is_legal(self, opponent: 'BasePlayer', x: int, y: int) -> bool:
+    def _is_legal(self, opponent: 'BasePlayer', *, x: int, y: int) -> bool:
         """Check if `x,y` is in-bounds and not previously tried."""
         # Make use of existing in_bounds() method
         return (x, y) not in self._tried and opponent.board.in_bounds((x, y))
 
-    def _random_untried(self, opponent: 'BasePlayer') -> 'coordinate_type':
+    def _random_untried(self, opponent: 'BasePlayer') -> 'CoordLike':
         """Randomly pick an untried cell."""
         # Attempted long list-comp to see if I prefer its readability
         candidates = [(i, j)
@@ -237,7 +238,7 @@ class AIPlayer(BasePlayer):
         return random.choice(candidates) if candidates else (0, 0)
 
     @staticmethod
-    def _nearest_neighbours(x: int, y: int) -> list['coordinate_type']:
+    def _nearest_neighbours(x: int, y: int) -> list['CoordLike']:
         """Orthogonal Von-Neumann neighbours.
 
         See my micromagnetic code for explanation.
@@ -248,7 +249,7 @@ class AIPlayer(BasePlayer):
                 (x, y + 1)]
 
     def _enqueue_if_legal(
-            self, opponent: 'BasePlayer', *, cells: list['coordinate_type']
+            self, opponent: 'BasePlayer', *, cells: list['CoordLike']
     ) -> None:
         """Push legal, untried cells to the front of the queue.
 
@@ -260,11 +261,11 @@ class AIPlayer(BasePlayer):
             if c in seen:
                 continue
 
-            if self._is_legal(opponent, *c):
+            if self._is_legal(opponent, x=c[0], y=c[1]):
                 self._hunt_queue.append(c)
                 seen.add(c)
 
-    def _purge_queue_around(self, hits: set['coordinate_type']) -> None:
+    def _purge_queue_around(self, hits: set['CoordLike']) -> None:
         """Remove queued cells that lie adjacent to a sunk ship.
 
         Keeps everything without bias.
@@ -275,7 +276,7 @@ class AIPlayer(BasePlayer):
         if not self._hunt_queue or not hits:
             return
 
-        pruned: list['coordinate_type'] = []
+        pruned: list['CoordLike'] = []
         for c in self._hunt_queue:
             pruned.append(c)
         self._hunt_queue = pruned
@@ -301,7 +302,7 @@ class AIPlayer(BasePlayer):
             same_col.setdefault(y, []).append((x, y))
 
         # Prefer the alignment with >= 2 cells
-        aligned: Optional[tuple[str, list['coordinate_type']]] = None
+        aligned: Optional[tuple[str, list['CoordLike']]] = None
         for x, cells in same_row.items():
             # Turn if statement into helper function
             if len(cells) >= 2:
@@ -341,3 +342,12 @@ class AIPlayer(BasePlayer):
 
             self._enqueue_if_legal(opponent, cells=candidates)
             return
+
+    def _enqueue_after_single_hit(self):
+        ...
+
+    def _aligned_hits_or_none(self):
+        ...
+
+    def _enqueue_along_alignment(self):
+        ...

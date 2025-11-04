@@ -54,14 +54,14 @@ from .player import DEFAULT_PLAYER, AIPlayer, HumanPlayer
 from src.log import get_logger
 
 if TYPE_CHECKING:
-    from board_games.coordinate import coordinate_type
+    from board_games.coordinate import CoordLike
 log = get_logger(__name__)
 
 
 class Game(BaseGame):
     """"""
 
-    def __init__(self, board_size: coordinate_type = (10, 10), *,
+    def __init__(self, board_size: CoordLike = (10, 10), *,
                  players_names: Optional[list[str]] = None,
                  autoplay: bool = False):
         super().__init__(emitter=None)

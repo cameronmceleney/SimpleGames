@@ -44,7 +44,7 @@ Notes:
 from __future__ import annotations
 
 # Standard library imports
-from typing import Any, Mapping, Optional, Self
+from typing import Any, Mapping, Optional, Self, TYPE_CHECKING
 
 # Third-party imports
 from pydantic import (BaseModel,
@@ -59,6 +59,9 @@ from .spec import ShipSpec
 from .position import Position, PositionField
 
 from utils import Divider
+
+if TYPE_CHECKING:
+    from board_games.coordinate import CoordLike
 
 # Module-level constants
 
@@ -189,7 +192,7 @@ class Ship(BaseModel):
         self._resize_hits()
         return self
 
-    def take_hit(self, coord_like: Any) -> tuple[bool, bool]:
+    def take_hit(self, coord_like: CoordLike) -> tuple[bool, bool]:
         """Handle a shot against this ship and apply a hit if successful."""
         if self.placement is None or self.spec.size == 0 or self.is_sunk:
             return False, False

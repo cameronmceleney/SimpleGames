@@ -1,6 +1,7 @@
 # board_games/__init__.py
 
-from board_games.coordinate import Coordinate, coordinate_type
+from board_games.coordinate import (coord_type, CoordLike, Coordinate, Point2D,
+                                    CoordinateField)
 from board_games.board import (
     BaseGrid as Grid,
     BaseBoard as Board)
@@ -8,8 +9,12 @@ from board_games.game import BaseGame
 from board_games.turns import RoundRobin
 
 __all__ = [
+    'Point2D',
+    'coord_type',
+    'CoordLike',
     'Coordinate',
-    'coordinate_type',
+    'CoordinateField',
+
     'Grid',
     'Board',
     'BaseGame',

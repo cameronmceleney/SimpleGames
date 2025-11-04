@@ -62,7 +62,8 @@ from typing import (
     Optional,
     Self,
     Type,
-    TypeAlias)
+    TypeAlias,
+    TYPE_CHECKING)
 
 # Third-party imports
 import numpy as np
@@ -70,6 +71,10 @@ import numpy as np
 # Local application imports
 from .coordinate import Coordinate
 from .symbols import SymbolsProto, DefaultSymbols
+
+if TYPE_CHECKING:
+    from board_games.coordinate import CoordLike
+
 
 __all__ = ['BaseGrid', 'BaseBoard']
 
@@ -134,7 +139,7 @@ class BaseBoard(BaseGrid):
         symbols:
     """
 
-    def in_bounds(self, coord_like: Any) -> bool:
+    def in_bounds(self, coord_like: CoordLike) -> bool:
         """Check if a coordinate is within the grid."""
         coord = Coordinate.coerce(coord_like)
         return (0 <= coord.x < self.height) and (0 <= coord.y < self.width)
@@ -146,7 +151,7 @@ class BaseBoard(BaseGrid):
                              f"<Board(height={self.height}, "
                              f"width={self.width})>")
 
-    def get(self, coord_like: Any) -> str:
+    def get(self, coord_like: CoordLike) -> str:
         """Read a cell.
 
         Return a Python scalar, not NumPy!
@@ -155,7 +160,7 @@ class BaseBoard(BaseGrid):
         self.require_in_bounds(coord.as_tuple())
         return self.grid.item(coord.as_tuple())
 
-    def set(self, coord_like: Any, symbol: str) -> None:
+    def set(self, coord_like: CoordLike, symbol: str) -> None:
         """Write to a cell."""
         coord = Coordinate.coerce(coord_like)
         self.require_in_bounds(coord)

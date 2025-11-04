@@ -155,7 +155,7 @@ class Fleet(BaseModel):
     def unplaced_ships(self) -> list[str]:
         return [t for t, s in self.ships.items() if s.placement is None]
 
-    def ship_at(self, coord_like: Any) -> Optional[Ship]:
+    def ship_at(self, coord_like: CoordLike) -> Optional[Ship]:
         """Find and return a ship occupying a tile.
 
         Arguments:
@@ -175,7 +175,7 @@ class Fleet(BaseModel):
 
         return None
 
-    def apply_shot(self, coord_like: Any) -> tuple[Outcome, Optional[Ship]]:
+    def apply_shot(self, coord_like: CoordLike) -> tuple[Outcome, Optional[Ship]]:
         """Resolve which ship is shot (if any) and apply the hit.
 
         Delegates a shot from an external to the underlying Ship."""
