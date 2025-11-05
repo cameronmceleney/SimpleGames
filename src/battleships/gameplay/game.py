@@ -50,7 +50,7 @@ from typing import Literal, Optional, TYPE_CHECKING
 from battleships.board import Board
 from board_games import BaseGame
 
-from .player import DEFAULT_PLAYER, AIPlayer, HumanPlayer
+from .player import AIPlayer, HumanPlayer
 from src.log import get_logger
 
 if TYPE_CHECKING:
@@ -73,45 +73,12 @@ class Game(BaseGame):
         if autoplay:
             self.board.show()
 
-    def _create_human_player(
-            self,
-            name: str,
-            config_file: str | None = None,
-            board: Optional[Board] = None,
-    ) -> 'HumanPlayer':
-        """Create and fully initialise a human player."""
-        player = HumanPlayer(
-            name=name.capitalize(),
-            id=len(self.players),
-            board=board or Board(height=self.board.height, width=self.board.width),
-
-        )
-        log.debug(player)
-
-        player.apply_positions(config_file or DEFAULT_PLAYER)
-        return player
-
-    def _create_ai_player(self, name: str = "CPU",
-                          suffix: str = '') -> AIPlayer:
-        """Small helper to add AI players to a game.
-        """
-        player = AIPlayer(
-            name=f'{name}_{suffix}' if suffix else name,
-            id=len(self.players),
-            board=Board(height=self.board.height, width=self.board.width),
-        )
-
-        player.apply_positions(DEFAULT_PLAYER)
-        return player
-
-    def add_players(self, *names: str, num_ai: int = 0) -> None:
-        """Add human players by name and optionally AI players."""
-        new_players = [self._create_human_player(n) for n in names]
-        new_players += [self._create_ai_player(suffix=str(i)) for i in range(num_ai)]
-        super().add_players(*new_players)
-
+    @property
     def remaining_players(
-            self, category: Literal['human', 'ai', 'both'] = 'both') -> int:
+            self,
+            category: Literal['human', 'ai', 'both'] = 'both'
+    ):
+        # TODO: Consider if method is problematic; `remaining_players` in ABC doesn't have `category` arg.
         counts = Counter()
         for p in self.players:
             if isinstance(p, HumanPlayer) and p.is_still_playing:
@@ -120,6 +87,48 @@ class Game(BaseGame):
                 counts['ai'] += 1
 
         return counts.total() if category == 'both' else counts[category]
+
+    def _create_human_player(
+            self,
+            name: str,
+            config_file: Optional[str] = None,
+            board: Optional[Board] = None,
+    ) -> 'HumanPlayer':
+        """Create and fully initialise a human player."""
+        player = HumanPlayer(
+            name=name.capitalize(),
+            id=len(self.players),
+            board=board or Board(*self.board.dims),
+        )
+        log.debug(player)
+
+        # TODO: Improve `config_file or None` syntax; might need to refactor method
+        player.apply_placements(config_file)
+        return player
+
+    def _create_ai_player(
+            self, name: str = "CPU",
+            suffix: str = '', *,
+            config_file: Optional[str] = None
+    ) -> AIPlayer:
+        """Small helper to add AI players to a game.
+        """
+        player = AIPlayer(
+            name=f'{name}_{suffix}' if suffix else name,
+            id=len(self.players),
+            board=Board(*self.board.dims),
+        )
+
+        player.apply_placements(config_file)
+        return player
+
+    def add_players(self, *names: str, num_ai: int = 0) -> None:
+        """Add human players by name and optionally AI players."""
+        """Add human players by name and optionally AI players."""
+        # TODO: Consider if this method conflicts with signature of `BaseGame.add_players` in problematic ways.
+        new_players = [self._create_human_player(n) for n in names]
+        new_players += [self._create_ai_player(suffix=str(i)) for i in range(num_ai)]
+        super().add_players(*new_players)
 
 
 def test_battleships() -> None:

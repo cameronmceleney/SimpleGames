@@ -122,7 +122,17 @@ class BaseGrid:
 class BoardLike(Protocol):
     height: int
     width: int
-    def in_bounds(self, coord_like: 'CoordLike') -> bool: ...
+
+    @property
+    def dims(self) -> tuple[int, int]: ...
+
+    def in_bounds(self, coord_like: 'CoordLike') -> bool:
+        """Check if a coordinate is within the grid."""
+        raise NotImplementedError
+
+    def show(self, *, mode: Any, show_guides: bool = True) -> Any:
+        """Display the board."""
+        raise NotImplementedError
 
 
 @dataclass(slots=True)
@@ -136,7 +146,19 @@ class BaseBoard(BaseGrid):
         width:
         grid:
         symbols:
+
+    TODO:
+      - Add BoardLike protocol to this class definition.
     """
+
+    @property
+    def dims(self) -> tuple[int, int]:
+        """Dimensions of the board.
+
+        Returns:
+            ``(height,width)``
+        """
+        return self.height, self.width
 
     def in_bounds(self, coord_like: CoordLike) -> bool:
         """Check if a coordinate is within the grid."""
@@ -146,7 +168,7 @@ class BaseBoard(BaseGrid):
     def require_in_bounds(self, c: Any) -> None:
         coord = Coordinate.coerce(c)
         if not self.in_bounds(coord):
-            raise IndexError(f"Coordinate is out of bounds: {coord.as_tuple()} "
+            raise IndexError(f"Coordinate is out of bounds: {coord.as_xy()} "
                              f"<Board(height={self.height}, "
                              f"width={self.width})>")
 
@@ -156,8 +178,8 @@ class BaseBoard(BaseGrid):
         Return a Python scalar, not NumPy!
         """
         coord = Coordinate.coerce(coord_like)
-        self.require_in_bounds(coord.as_tuple())
-        return self.grid.item(coord.as_tuple())
+        self.require_in_bounds(coord.as_xy())
+        return self.grid.item(coord.as_xy())
 
     def set(self, coord_like: CoordLike, symbol: str) -> None:
         """Write to a cell."""
@@ -167,7 +189,7 @@ class BaseBoard(BaseGrid):
         if not (isinstance(symbol, str) and len(symbol) == 1):
             raise ValueError(f"Symbol must be single character, got: {symbol!r}")
 
-        self.grid[coord.as_tuple()] = symbol
+        self.grid[coord.as_xy()] = symbol
 
     def _col_ids(self, *,
                  col_symbols: COL_AND_ROW_RENDER_SYMBOLS = 'let',

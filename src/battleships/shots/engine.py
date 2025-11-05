@@ -40,7 +40,7 @@ Notes:
 from __future__ import annotations
 
 # Standard library imports
-from typing import Any, Optional
+from typing import Any, Optional, TYPE_CHECKING
 
 # Third-party imports
 
@@ -48,7 +48,10 @@ from typing import Any, Optional
 from board_games import Coordinate
 from .info import Info
 from .outcome import Outcome
-from .protocols import BoardProto, FleetProto
+from .protocols import BoardLike, FleetLike
+
+if TYPE_CHECKING:
+    from board_games.coordinate import CoordLike
 
 # Module-level constants
 
@@ -65,9 +68,11 @@ class Engine:
             return None, f"{type(e).__name__}: {e}"
 
     @staticmethod
-    def process(target_board: BoardProto,
-                target_fleet: FleetProto,
-                shot_like: Any) -> Info:
+    def process(
+            coord_like: Any,
+            target_board: 'BoardLike',
+            target_fleet: 'FleetLike'
+    ) -> Info:
         """Determine the outcome of a shot.
 
         Order of checks upon a shot (Test -> result if failed)
@@ -78,7 +83,8 @@ class Engine:
             4. hits a ship -> MISS
             5. Return HIT
         """
-        coord, err = Engine.coerce(shot_like)
+        coord, err = Engine.coerce(coord_like)
+
         if coord is None:
             return Info(coord=Coordinate(0, 0),
                         outcome=Outcome.INVALID)

@@ -165,8 +165,7 @@ class BasePlayer(BaseModel, ABC):
                 continue
 
             coord = Coordinate.coerce(raw)
-            turn = shots.Engine.process(opponent.board, opponent.fleet,
-                                        coord)
+            turn = shots.Engine.process(coord, opponent.board, opponent.fleet)
 
             if turn.outcome not in (shots.Outcome.INVALID,
                                     shots.Outcome.ERROR,

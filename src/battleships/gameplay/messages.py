@@ -42,7 +42,7 @@ from __future__ import annotations
 # Standard library imports
 from enum import auto, Enum, StrEnum
 from dataclasses import dataclass
-from typing import ClassVar, Optional, Self
+from typing import Any, ClassVar, Optional, Self
 
 # Third-party imports
 
@@ -80,6 +80,18 @@ class Command(Enum):
 
 Commands = Command
 """Alias. """
+
+
+def _is_command_token(x: Any) -> bool:
+    """
+    TODO:
+     - Improve exception handling
+     - Decide if this function should be bound to a class
+    """
+    try:
+        return isinstance(x, COMMANDS)
+    except Exception:
+        return False
 
 
 @dataclass(frozen=True)

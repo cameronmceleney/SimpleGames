@@ -52,48 +52,17 @@ from pydantic import BeforeValidator
 
 # Local application imports
 
-
-__all__ = [
-    'Point2D',
-    'PointLike',
-    'PointType',
-    'CoordType',
-    'coord_type',
-    'CoordLike',
-    'value_to_int',
-    '_from_iterable',
-    '_from_string',
-    'pair_to_point2d',
-    'Coordinate',
-    'CoordinateField']
-
-
-class Point2D(NamedTuple):
-    """Immutable 2D point with attribute and index access.
-
-    Attributes:
-        x:
-        y:
-    """
-    # Used `NamedTuple` instead of `dataclass` or `attrs` as ``Point2D``
-    # shouldn't be treated like a class! Wanted a `tuple` with attribute and
-    # index access.
-    x: int
-    y: int
-
-
-# Probably should be private to the file.
-coord_type: TypeAlias = tuple[int, int]
-"""Canonical grid index type-alias value storage / indexing."""
-
 CoordType: TypeAlias = tuple[int, int]
-PointType: TypeAlias = tuple[int, int]
+"""Coordinate type."""
 
-PointLike: TypeAlias = Union[tuple[int, int], Point2D]
+PointLike: TypeAlias = Union[CoordType, '_Point2D']
+"""Point that is compatible with `CoordType`.
 
+Only for use within this module.
+"""
 
 CoordLike: TypeAlias = Union[
-    'PointLike',
+    PointLike,
     'Coordinate',
     Mapping[str, Any],
     str
@@ -110,7 +79,6 @@ def value_to_int(v: Any) -> int:
     Raises:
         ValueError: for non-integers.
     """
-
     if isinstance(v, int):
         return v
 
@@ -129,78 +97,96 @@ def value_to_int(v: Any) -> int:
     raise ValueError(f"Value '{v!r}' cannot be cast to 'int'")
 
 
-def _from_iterable(raw: Iterable[Any]) -> 'Point2D':
-    """Convert to two values such as `(x,y)` or `[x,y]` to a ``Point2D``..
+class _Point2D(NamedTuple):
+    """Internal immutable 2D point with attribute and index access.
 
-    Arguments:
-        raw:
+    Note:
+        Used `NamedTuple` instead of `dataclass` or `attrs` as ``Point2D``
+        shouldn't be treated like a class! Wanted a `tuple` with attribute and
+        index access.
 
-    Raises:
-        ValueError: Unable to build `Point2D` from iterable.
+    Attributes:
+        x:
+        y:
     """
-    iterator = iter(raw)
+    x: int
+    y: int
 
-    try:
-        first = next(iterator)
-        second = next(iterator)
-    except StopIteration:
-        raise ValueError(f"Expected two elements but got: {raw!r}")
+    @classmethod
+    def new(cls, x: Any, y: Any) -> '_Point2D':
+        return cls(value_to_int(x), value_to_int(y))
 
-    # Attempting a third next() fails unless there's exactly two elements.
-    try:
-        next(iterator)
-    except StopIteration:
-        return Point2D(value_to_int(first), value_to_int(second))
-    else:
-        raise ValueError(f"Expected exactly two elements but got: {raw!r}")
+    @classmethod
+    def _from_iterable(cls, raw: Iterable[Any]) -> _Point2D:
+        """Convert to two values such as `(x,y)` or `[x,y]` to a ``Point2D``..
 
+        Arguments:
+            raw:
 
-def _from_string(raw: str) -> 'Point2D':
-    """Return a ``Point2D`` by parsing a string such as '(x,y)', 'x,y' or '[x,y]'.
+        Raises:
+            ValueError: Unable to build `Point2D` from iterable.
+        """
+        iterator = iter(raw)
 
-    Arguments:
-        raw:
+        try:
+            first = next(iterator)
+            second = next(iterator)
+        except StopIteration:
+            raise ValueError(f"Expected two elements but got: {raw!r}")
 
-    Raises:
-        ValueError: Unable to build `Point2D` from given string.
-    """
-    s = raw.strip()
+        # Attempting a third next() fails unless there's exactly two elements.
+        try:
+            next(iterator)
+        except StopIteration:
+            return cls.new(first, second)
+        else:
+            raise ValueError(f"Expected exactly two elements but got: {raw!r}")
 
-    if s and (s[0] in "([{" and s[-1] in ")]}"):
-        val = literal_eval(s)
-        return _from_iterable(val)
+    @classmethod
+    def _from_string(cls, raw: str) -> _Point2D:
+        """Return a ``Point2D`` by parsing a string such as '(x,y)', 'x,y' or '[x,y]'.
 
-    parts = [p.strip() for p in s.split(',')]
-    if len(parts) != 2:
-        raise ValueError(f"Invalid Coordinate string: {raw!r}")
+        Arguments:
+            raw:
 
-    return Point2D(value_to_int(parts[0]), value_to_int(parts[1]))
+        Raises:
+            ValueError: Unable to build `Point2D` from given string.
+        """
+        s = raw.strip()
 
+        if s and (s[0] in "([{" and s[-1] in ")]}"):
+            val = literal_eval(s)
+            return cls._from_iterable(val)
 
-def pair_to_point2d(raw: Any) -> 'Point2D':
-    """Attempt to construct a ``Coordinate`` from various inputs.
+        parts = [p.strip() for p in s.split(',')]
+        if len(parts) != 2:
+            raise ValueError(f"Invalid Coordinate string: {raw!r}")
 
-    Arguments:
-        raw:
-    """
-    if isinstance(raw, Coordinate):
-        return Point2D(raw.x, raw.y)
+        return cls.new(parts[0], parts[1])
 
-    if isinstance(raw, Point2D):
-        return raw
+    @classmethod
+    def from_any(cls, raw: 'CoordLike') -> _Point2D:
+        """Attempt to construct a ``Coordinate`` from various inputs.
 
-    if isinstance(raw, Mapping) and {'x', 'y'} <= raw.keys():
-        return Point2D(value_to_int(raw['x']),
-                       value_to_int(raw['y']))
+        Arguments:
+            raw:
+        """
+        if isinstance(raw, Coordinate):
+            return cls.new(raw.x, raw.y)
 
-    if isinstance(raw, str):
-        return _from_string(raw)
+        if isinstance(raw, _Point2D):
+            return raw
 
-    if isinstance(raw, (list, tuple)) and len(raw) == 2:
-        return Point2D(value_to_int(raw[0]),
-                       value_to_int(raw[1]))
+        if isinstance(raw, (list, tuple)) and len(raw) == 2:
+            return cls.new(raw[0], raw[1])
 
-    raise ValueError(f"Unsupported coordinate input: {raw!r}")
+        if isinstance(raw, Mapping) and {'x', 'y'} <= raw.keys():
+            return cls.new(raw['x'], raw['y'])
+
+        if isinstance(raw, str):
+            return cls._from_string(raw)
+
+        raise ValueError(f"Unsupported coordinate input: {raw!r}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -217,29 +203,15 @@ class Coordinate:
     y: int
 
     def __init__(self, x: Any, y: Optional[Any] = None):
-        if y is not None:
-            x_, y_ = value_to_int(x), value_to_int(y)
-        else:
-            p = pair_to_point2d(x)
-            x_, y_ = p.x, p.y
+        """"""
+        point = _Point2D.from_any(x) if y is None else _Point2D.new(x, y)
 
-        object.__setattr__(self, 'x', x_)
-        object.__setattr__(self, 'y', y_)
+        object.__setattr__(self, 'x', point.x)
+        object.__setattr__(self, 'y', point.y)
 
-    def as_xy(self) -> 'coord_type':
+    def as_xy(self) -> 'CoordType':
         """Return as ``(x,y)``"""
         return self.x, self.y
-
-    def as_tuple(self) -> 'coord_type':
-        """Return as ``(x,y)``.
-
-        For backwards compatibility.
-        """
-        return self.as_xy()
-
-    def as_point(self) -> 'Point2D':
-        """Return as Point2D for accesses by attribute or index downstream."""
-        return Point2D(self.x, self.y)
 
     def __iter__(self):
         yield self.x
@@ -259,12 +231,14 @@ class Coordinate:
         raise IndexError(i)
 
     @classmethod
-    def from_point(cls, p: 'Point2D') -> Self:
-        return cls(p.x, p.y)
+    def from_xy(cls, xy: 'CoordType') -> Self:
+        return cls(xy)
 
     @classmethod
-    def from_xy(cls, xy: coord_type) -> Self:
-        return cls(xy)
+    def to_xy(cls, raw: 'CoordLike') -> 'CoordType':
+        """Normalise any `CoordLike` to a plain `(x,y)` tuple."""
+        p = _Point2D.from_any(raw)
+        return p.x, p.y
 
     @classmethod
     def coerce(cls, v: Any) -> Self:

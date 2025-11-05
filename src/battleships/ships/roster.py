@@ -40,6 +40,7 @@ Notes:
 from __future__ import annotations
 
 # Standard library imports
+from dataclasses import dataclass
 from typing import Mapping, Optional
 
 # Third-party imports
@@ -58,14 +59,18 @@ from .spec import ShipSpec
 from utils import Divider, JustifyText, load_yaml
 
 from src.log import get_logger
+log = get_logger(__name__)
 
-
-__all__ = ['ROSTER_DEFAULT', 'Roster']
 
 # Module-level constants
-ROSTER_DEFAULT: str = 'battleships/config/rosters.yml'
+@dataclass(frozen=True)
+class _Defaults:
+    """Default `Battleships` ``Roster`` properties.
 
-log = get_logger(__name__)
+    Attributes:
+        file_path: Default relative path to the configuration file.
+    """
+    file_path: str = 'battleships/config/rosters.yml'
 
 
 class Roster(BaseModel):
@@ -92,7 +97,7 @@ class Roster(BaseModel):
 
     @classmethod
     def load_from_yaml(cls, id_: str, *,
-                       filepath: str = ROSTER_DEFAULT) -> 'Roster':
+                       filepath: str = _Defaults.file_path) -> 'Roster':
         """Load a roster from the YAML configuration file.
 
         The shape of each entry in the roster file should be:

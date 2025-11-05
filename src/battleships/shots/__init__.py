@@ -2,7 +2,7 @@ from .outcome import Outcome
 from .info import Shots, Info
 from .engine import Engine
 
-from battleships.shots.protocols import BoardProto, FleetProto
+from battleships.shots.protocols import BoardLike, FleetLike
 
 __all__ = [
     'Outcome',
@@ -10,6 +10,6 @@ __all__ = [
     'Info',
     'Engine',
 
-    'BoardProto',
-    'FleetProto'
+    'BoardLike',
+    'FleetLike'
 ]

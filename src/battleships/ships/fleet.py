@@ -40,6 +40,7 @@ Notes:
 from __future__ import annotations
 
 # Standard library imports
+from dataclasses import dataclass
 from typing import Any, Mapping, Optional
 
 # Third-party imports
@@ -53,20 +54,35 @@ from yaml import YAMLError
 
 # Local application imports
 from battleships.shots.outcome import Outcome
-from board_games import Coordinate
-from .roster import Roster, ROSTER_DEFAULT
-from .ship import Ship
+from board_games import Coordinate, CoordLike
 from utils import Divider, JustifyText, load_yaml
+
+from .roster import (
+    _Defaults as RosterDefaults,
+    Roster)
+from .ship import Ship
 
 from src.log import get_logger
 
 log = get_logger(__name__)
 
-__all__ = ['FLEET_DEFAULT', 'Fleet']
-
 
 # Module-level constants
-FLEET_DEFAULT: str = 'battleships/config/fleet.yml'
+
+@dataclass(frozen=True)
+class _Defaults:
+    """Default `Battleships` ``Fleet`` properties.
+
+    Attributes:
+        id: Default fleet ID to retrieve.
+        file_path: Default relative path to the fleet configuration file.
+    """
+    id: str = 'basic_fleet_1'
+    file_path: str = 'battleships/config/fleet.yml'
+
+    @classmethod
+    def create_fleet(cls):
+        return Fleet.load_from_yaml(fleet_id=cls.id)
 
 
 class Fleet(BaseModel):
@@ -186,14 +202,13 @@ class Fleet(BaseModel):
         hit, sunk = ship.take_hit(coord_like)
         return (Outcome.HIT, ship) if hit else (Outcome.MISS, None)
 
-
     @classmethod
     def load_from_yaml(
             cls,
             *,
             fleet_id: str,
-            roster_filepath: str = ROSTER_DEFAULT,
-            fleet_filepath: str = FLEET_DEFAULT,
+            roster_filepath: str = RosterDefaults.file_path,
+            fleet_filepath: str = _Defaults.file_path,
             settings: Optional[Any] = None
     ) -> 'Fleet':
         """Load a fleet from the YAML configuration file.

@@ -42,18 +42,18 @@ from __future__ import annotations
 # Standard library imports
 from abc import ABC, abstractmethod
 import random
-from typing import (Any, Protocol, runtime_checkable, Optional, Sequence,
-                    Iterable)
+from typing import Any, Iterable, Protocol, TYPE_CHECKING
 
 # Third-party imports
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, PrivateAttr
 
 # Local application imports
-from .board import BoardLike
-from .coordinate import Point2D, Coordinate, PointLike, CoordType, PointType
 from .messages import Messages
+from board_games.board import BoardLike
+from board_games.coordinate import Coordinate
 
-__all__ = []
+if TYPE_CHECKING:
+    from board_games.coordinate import CoordType, CoordLike
 
 
 class PlayerLike(Protocol):
@@ -73,32 +73,51 @@ class BasePlayer(ABC, BaseModel):
         name: Player's username.
         id:
         board: Personal playing board.
-        moves: Previous board cell events.
+        _moves: Previous board cell events.
     """
+    model_config = ConfigDict(arbitrary_types_allowed=True, validate_default=True)
+
     name: str
     id: int
     board: BoardLike
-    moves: list[Coordinate] = Field(default_factory=list)
 
+    _moves: list[Coordinate] = PrivateAttr(default_factory=list)
+
+    @property
     @abstractmethod
     def is_still_playing(self) -> bool:
         """Game-defined semantics for if the player is still participating."""
         raise NotImplementedError
 
     @abstractmethod
-    def get_action(self, opponent: 'BasePlayer') -> Any:
+    def get_action(self, opponent: Any) -> Any:
         """Game-specific action or command token."""
         raise NotImplementedError
 
-    def record_move(self, move: Coordinate) -> None:
-        self.moves.append(move)
-
-    def on_result(self, result: Any, opponent: 'BasePlayer') -> None:
-        """Optional hook to emit to UI."""
-        return
+    def record_move(self, move: 'CoordLike') -> None:
+        """Store player's move."""
+        c = Coordinate.coerce(move)
+        self._moves.append(c)
 
     @abstractmethod
-    def end_turn(self) -> None:
+    def on_result(self, opponent: Any, result: Any) -> Any:
+        """Optional hook to emit to the user-interface."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def take_turn(self, opponent: Any) -> Any:
+        """Orchestrator for a single turn.
+
+        Shared flow that delegates to optional overloaded methods for input.
+        Overloaded method may support I/O.
+
+        Arguments:
+            opponent: Opposing entity/entities that this player's turn involves.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def end_turn(self) -> Any:
         """Final events before ending the turn.
 
         Normally involves a blocking event for humans and no-op for AIs.
@@ -106,82 +125,103 @@ class BasePlayer(ABC, BaseModel):
         raise NotImplementedError
 
 
-class BaseHumanPlayer(ABC, BasePlayer):
+class BaseHumanPlayer(BasePlayer, ABC):
     """Generic human player."""
-    @staticmethod
-    def end_turn() -> None:
+
+    def end_turn(self) -> None:
         try:
             input(Messages.END_TURN)
         except EOFError:
             pass
+        else:
+            return
 
 
-class BaseAIPlayer(BasePlayer):
-    """Generic scaffolding for a computer (AI) player."""
+class BaseAIPlayer(BasePlayer, ABC):
+    """Generic scaffolding for a computer (AI) player.
 
-    _tried_moves: set['Point2D'] = Field(default_factory=set, init=False, repr=False)
-    _queued_moves: list['Point2D'] = Field(default_factory=list, init=False, repr=False)
+    Attributes:
+        _queued_moves: Stored moves to attempt sequentially in upcoming turns.
+        _tried_index: Completed moves from previous turns.
+    """
+    _queued_moves: list[Coordinate] = PrivateAttr(default_factory=list)
+    _tried_index: set['CoordType'] = PrivateAttr(default_factory=set)
 
     def end_turn(self) -> None:
-        """Non-blocking messages to console."""
-        print('\n' + Messages.AI_END_TURN, end='\n\n')
+        """Non-blocking final events before ending turn.
 
-    def _is_legal(self, opponent: 'BasePlayer', point: 'PointLike') -> bool:
+        Note:
+            Don't decorate this method with `@staticmethod` as it conflicts
+            with `BasePlayer.end_turn()`.
+        """
+        print('\n' + Messages.AI_END_TURN, end='\n\n')
+        return
+
+    def _is_legal(self, opponent: BasePlayer, coord: Coordinate) -> bool:
         """Check if `x,y` is in-bounds and not previously tried."""
-        x, y = point
-        return (x, y) not in self._tried_moves and opponent.board.in_bounds((x, y))
+        return (coord not in self._tried_index) and opponent.board.in_bounds(coord)
 
     @staticmethod
-    def _nearest_neighbours(point: 'PointLike') -> list['PointType']:
+    def _nearest_neighbours(coord: Coordinate) -> list[Coordinate]:
         """Orthogonal Von-Neumann neighbours.
 
         See my micromagnetic code for explanation.
         """
-        x, y = point
-        return [x - 1, y,
-                x + 1, y,
-                x, y - 1,
-                x, y + 1]
+        neighbours: list['CoordType'] = [
+            (coord.x - 1, coord.y),
+            (coord.x + 1, coord.y),
+            (coord.x, coord.y - 1),
+            (coord.x, coord.y + 1)
+        ]
+        return [Coordinate.from_xy(n) for n in neighbours]
 
     def _enqueue_if_legal(
-            self, opponent: 'BasePlayer', *, cells: Iterable['PointLike']
+            self, opponent: BasePlayer, cells: Iterable['CoordLike']
     ) -> None:
         """Push legal, untried cells to the front of the queue.
 
         Force ``cells`` to be entered as keyword to improve readability during
         calls.
         """
-        seen: set[Point2D] = set(self._queued_moves)
+        seen: set['CoordType'] = {c.as_xy() for c in self._queued_moves}
         for c in cells:
-            if c in seen:
+            coord = Coordinate.coerce(c)
+            if coord.as_xy() in seen:
                 continue
 
-            if self._is_legal(opponent, point=c):
-                point = Point2D(*c)
-                self._queued_moves.append(point)
-                seen.add(point)
+            if self._is_legal(opponent, c):
+                self._queued_moves.append(coord)
+                seen.add(coord.as_xy())
 
-    def _random_untried(self, opponent: 'BasePlayer') -> 'Point2D':
+    def _random_untried(self, opponent: BasePlayer) -> Coordinate:
         """Randomly pick an untried cell."""
         # Attempted long list-comp to see if I prefer its readability
-        if len(self._tried_moves) >= opponent.board.height * opponent.board.width:
-            return Point2D(0, 0)
+        if len(self._tried_index) >= opponent.board.height * opponent.board.width:
+            return Coordinate(0, 0)
 
-        candidates = [(i, j)
+        candidates = [Coordinate(i, j)
                       for i in range(opponent.board.height)
                       for j in range(opponent.board.width)
-                      if (i, j) not in self._tried]
+                      if Coordinate(i, j) not in self._tried_index]
 
         point = random.choice(candidates) if candidates else (0, 0)
-        return Point2D(*point)
+        return Coordinate.from_xy(point)
 
-    def get_action(self, opponent: 'BasePlayer') -> Any:
+    def get_action(self, opponent: BasePlayer) -> Coordinate:
+        """Default action source: queue first, otherwise get new.
+
+        Overload in concrete instance as needed.
+        """
         while self._queued_moves:
-            point = self._queued_moves.pop(0)
-            if self._is_legal(opponent, point=point):
-                self._tried_moves.add(point)
-                return point
+            queued_move = self._queued_moves.pop(0)
+            if self._is_legal(opponent, queued_move):
+                self._tried_index.add(queued_move.as_xy())
+                return queued_move
 
-        point = self._random_untried(opponent)
-        self._tried_moves.add(point)
-        return point
+        new_move = self._random_untried(opponent)
+        self._tried_index.add(new_move.as_xy())
+        return new_move
+
+    def record_move(self, move: 'CoordLike') -> None:
+        super().record_move(move)
+        self._tried_index.add(Coordinate.coerce(move).as_xy())

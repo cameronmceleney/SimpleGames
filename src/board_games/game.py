@@ -40,7 +40,7 @@ Notes:
 from __future__ import annotations
 
 # Standard library imports
-from typing import Any, Callable, Optional, Protocol
+from typing import Callable, Optional, TYPE_CHECKING
 
 # Third-party imports
 
@@ -48,14 +48,10 @@ from typing import Any, Callable, Optional, Protocol
 # Local application imports
 from .turns import RoundRobin
 
-__all__ = ['PlayerLike', 'BaseGame']
+if TYPE_CHECKING:
+    from board_games.player import PlayerLike
 
-
-class PlayerLike(Protocol):
-    name: str
-    is_still_playing: bool
-    def take_turn(self, opponent: 'PlayerLike') -> Any: ...
-    def end_turn(self) -> None: ...
+__all__ = ['BaseGame']
 
 
 class BaseGame:

@@ -48,6 +48,7 @@ Notes:
 from __future__ import annotations
 
 # Standard library imports
+from enum import Enum
 from typing import Any, Literal
 
 # Third-party imports
@@ -60,6 +61,23 @@ from battleships.ships import Position
 from utils import CleanText, Divider, JustifyText
 
 from .symbols import Symbols
+
+
+@dataclass(frozen=True)
+class _Defaults:
+    """
+    Default `Battleships` ``Board`` properties.
+
+    Attributes:
+        height: Default height of the board
+        width: Default width of the board.
+    """
+    height: int = 10
+    width: int = 10
+
+    @classmethod
+    def create_board(cls) -> 'Board':
+        return Board(height=cls.height, width=cls.width)
 
 
 @dataclass(slots=True)

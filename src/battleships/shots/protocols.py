@@ -59,7 +59,7 @@ if TYPE_CHECKING:
 
 
 @runtime_checkable
-class BoardProto(Protocol):
+class BoardLike(Protocol):
 
     def in_bounds(self, coord_like: CoordLike) -> bool: ...
     def get(self, coord_like: CoordLike) -> str: ...
@@ -69,5 +69,5 @@ class BoardProto(Protocol):
 
 
 @runtime_checkable
-class FleetProto(Protocol):
+class FleetLike(Protocol):
     def apply_shot(self, coord_like: CoordLike) -> tuple[Outcome, Optional[Ship]]: ...
