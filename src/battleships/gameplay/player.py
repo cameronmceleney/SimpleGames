@@ -42,7 +42,7 @@ from __future__ import annotations
 # Standard library imports
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Literal, Optional, TypeAlias, TYPE_CHECKING
+from typing import Literal, Optional, TypeAlias, TYPE_CHECKING
 
 # Third-party imports
 from pydantic import ConfigDict, Field, PrivateAttr
@@ -59,7 +59,7 @@ from battleships.ships import _FleetDefaults, Fleet
 from .messages import (
     parse,
     Commands,
-    _is_command_token,
+    is_command_token,
     Registry,
     make_guess_cmd, exit_cmd, help_cmd, show_opp_cmd, show_own_cmd)
 
@@ -156,7 +156,7 @@ class BaseBattleshipPlayer(BasePlayer, ABC):
                 log.debug("`get_action()` returned None. Continuing...")
                 continue
 
-            if _is_command_token(raw):
+            if is_command_token(raw):
                 continue
 
             info = shots.Engine.process(raw, opponent.board, opponent.fleet)

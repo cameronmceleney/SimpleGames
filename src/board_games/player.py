@@ -1,6 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
 """(One liner introducing this file player.py)
 
 (
@@ -64,7 +61,7 @@ class PlayerLike(Protocol):
     def end_turn(self) -> None: ...
 
 
-class BasePlayer(ABC, BaseModel):
+class BasePlayer(BaseModel, ABC):
     """Game-agnostic player base class.
 
     Has no knowledge of game-engines, -outcomes or -boards.
@@ -130,7 +127,7 @@ class BaseHumanPlayer(BasePlayer, ABC):
 
     def end_turn(self) -> None:
         try:
-            input(Messages.END_TURN)
+            input(Messages.END_TURN_BLOCKING)
         except EOFError:
             pass
         else:
@@ -154,7 +151,7 @@ class BaseAIPlayer(BasePlayer, ABC):
             Don't decorate this method with `@staticmethod` as it conflicts
             with `BasePlayer.end_turn()`.
         """
-        print('\n' + Messages.AI_END_TURN, end='\n\n')
+        print('\n' + Messages.END_TURN, end='\n\n')
         return
 
     def _is_legal(self, opponent: BasePlayer, coord: Coordinate) -> bool:

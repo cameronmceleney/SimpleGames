@@ -48,7 +48,6 @@ Notes:
 from __future__ import annotations
 
 # Standard library imports
-from enum import Enum
 from typing import Any, Literal
 
 # Third-party imports
